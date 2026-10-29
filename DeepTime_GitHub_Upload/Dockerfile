@@ -3,8 +3,8 @@ FROM node:20-alpine AS base
 # 1. Install dependencies
 FROM base AS deps
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci
+COPY package.json ./
+RUN npm install --legacy-peer-deps
 
 # 2. Build the Next.js application
 FROM base AS builder
