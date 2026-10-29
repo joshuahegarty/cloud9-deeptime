@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: cloud9-deeptime
+    runtime: docker
+    plan: starter
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PGLITE_DATA_DIR
+        value: /app/.data/pglite
+    disk:
+      name: deeptime-data
+      mountPath: /app/.data
+      sizeGB: 1
