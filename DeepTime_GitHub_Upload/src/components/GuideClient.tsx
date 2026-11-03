@@ -280,8 +280,8 @@ export function GuideClient() {
               <path d="M 580 256 C 630 256, 630 270, 680 270" fill="none" stroke="#38bdf8" strokeWidth="1.8" markerEnd="url(#arr-sky)" />
 
               <rect x="680" y="196" width="420" height="44" rx="9" fill="#0c4a6e" stroke="#38bdf8" strokeWidth="1.5" />
-              <text x="696" y="215" fill="#ffffff" fontSize="11.5" fontWeight="800">2A. Live Floor, Task Assignment, Open Pool &amp; Zone Heatmap (/floor)</text>
-              <text x="696" y="230" fill="#bae6fd" fontSize="10">15m/30m Idle Alerts, Our Cost Approval Queue, Crew Stop Qty &amp; Travel Heatmap</text>
+              <text x="696" y="215" fill="#ffffff" fontSize="11.5" fontWeight="800">2A. Live Floor, 1-Click Clock In/Out &amp; Open Pool (/floor)</text>
+              <text x="696" y="230" fill="#bae6fd" fontSize="10">15m/30m Idle Alerts, Our Cost Approval Queue &amp; Crew Task Control</text>
 
               <rect x="680" y="248" width="420" height="44" rx="9" fill="#0c4a6e" stroke="#38bdf8" strokeWidth="1.5" />
               <text x="696" y="267" fill="#ffffff" fontSize="11.5" fontWeight="800">2B. Timesheet Edits, Urgent Below-Target Filter &amp; 19:00 Auto-Close (/entries)</text>
@@ -615,7 +615,7 @@ export function GuideClient() {
                   <strong>Pre-Assign Queue, Open Pool Broadcast &amp; Crew Start</strong>: Push next tasks to specific operatives, broadcast an <strong>Open Pool Task</strong> (e.g. <em>&ldquo;Need 2 staff for Bay 3 Unload&rdquo;</em>), or tick multiple staff to start/stop a <strong>Crew Task</strong> together (with mandatory crew stop quantity &amp; red zero-productivity warning).
                 </li>
                 <li>
-                  <strong>Dual Idle Alerts (<code className="text-sky-300">15m / 30m</code>) &amp; Zone Travel Heatmap</strong>: Spot operatives with no active task for 15+ mins or no pulse for 30+ mins, and view the live <strong>Warehouse Zone &amp; Aisle Heatmap</strong> (`Zones A–D`, `Pack Bench`, `Goods-In Bay`, `Dispatch`).
+                  <strong>Dual Idle Alerts (<code className="text-sky-300">15m / 30m</code>) &amp; 1-Click Manager Clock In/Out</strong>: Spot operatives with no active task for 15+ mins or no pulse for 30+ mins, and clock any staff member in or out in 1 click. <em>(Note: Spatial Floor Walking Telemetry &amp; Warehouse Aisle Heatmaps are scheduled for V2 Roadmap.)</em>
                 </li>
                 <li>
                   <strong>Supervisor Approval Queue for <code className="text-sky-300">Our Cost</code></strong>: Whenever an operative starts a Cloud9 Internal / Housekeeping task (Replenishment, Sweeping, Cardboard Clean-Out), it appears in the <code className="text-sky-300">/floor</code> approval banner for 1-click Supervisor sign-off.

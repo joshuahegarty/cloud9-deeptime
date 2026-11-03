@@ -935,6 +935,20 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
       'resolved',
       'Done — Temp PIN invite generator and first-login Change PIN modal are now live.',
       '[{"id":"upd-3","author_name":"Josh","author_role":"admin","status":"resolved","note":"Done — Temp PIN invite generator and first-login Change PIN modal are now live.","created_at":"2026-11-03T21:05:00.000Z"}]'::jsonb
+    ),
+    (
+      '80000000-0000-0000-0000-000000000004',
+      'feature',
+      'medium',
+      'V2 Roadmap: Spatial Floor Walking Telemetry & Warehouse Zone/Aisle Heatmaps',
+      'Planned for V2: Overlay warehouse zone and aisle walking telemetry (Zones A–E, Goods-In Dock, Pick Tower Aisles, Pack Benches, FSDU Assembly, Bulk Dispatch) with live congestion & travel distance heatmaps.',
+      '/floor',
+      '00000000-0000-0000-0000-000000000005',
+      'Josh',
+      'admin',
+      'planned',
+      'Deferred from V1 to keep the V1 Floor view clean and focused; scheduled in the V2 Roadmap.',
+      '[{"id":"upd-4","author_name":"Josh","author_role":"admin","status":"planned","note":"Deferred from V1 to keep the V1 Floor view clean and focused; scheduled in the V2 Roadmap.","created_at":"2026-11-03T23:21:00.000Z"}]'::jsonb
     )
   on conflict (id) do nothing;
 `;
