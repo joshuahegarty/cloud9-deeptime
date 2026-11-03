@@ -7,6 +7,7 @@ import {
   runShiftEndJobAction,
 } from '@/app/actions';
 import { clearOfflineQueueItems, getOfflineQueueItems } from '@/lib/offline-queue';
+import { playDarthMarleyVoice } from '@/lib/darthMarleyAudio';
 import { UserPublic } from '@/lib/types';
 import { FeedbackModal } from '@/components/FeedbackModal';
 import {
@@ -25,6 +26,7 @@ import {
   Sun,
   Tablet,
   Unlock,
+  Volume2,
   Wifi,
   WifiOff,
 } from 'lucide-react';
@@ -38,7 +40,7 @@ interface AppShellProps {
 }
 
 const DEMO_USERS = [
-  { id: '00000000-0000-0000-0000-000000000005', label: 'Josh — CEO, Builder & Admin' },
+  { id: '00000000-0000-0000-0000-000000000005', label: 'Josh — Darth Marley • CEO & Dreadlock Sith Lord' },
   { id: '00000000-0000-0000-0000-000000000004', label: 'Mark — Supervisor • Core Warehouse' },
   { id: '00000000-0000-0000-0000-000000000006', label: 'Edna — Supervisor • Core Warehouse' },
   { id: '00000000-0000-0000-0000-000000000001', label: 'Erica — Core Warehouse Operative' },
@@ -68,6 +70,12 @@ export function AppShell({ user, children }: AppShellProps) {
   const [lightMode, setLightMode] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [demoSwitcherUnlocked, setDemoSwitcherUnlocked] = useState(false);
+  const [darthMarleyQuote, setDarthMarleyQuote] = useState<string | null>(null);
+
+  const triggerDarthMarley = () => {
+    const q = playDarthMarleyVoice();
+    setDarthMarleyQuote(q);
+  };
 
   // Automatic 7:00 PM (19:00 Europe/London) End-of-Shift Auto-Close & Auto-Logout (Item #19)
   useEffect(() => {
@@ -245,6 +253,9 @@ export function AppShell({ user, children }: AppShellProps) {
 
   const handleQuickSwitchUser = async (targetUserId: string) => {
     if (!targetUserId) return;
+    if (targetUserId === '00000000-0000-0000-0000-000000000005') {
+      triggerDarthMarley();
+    }
     window.localStorage.removeItem('kiosk');
     setIsKioskDevice(false);
     window.dispatchEvent(new CustomEvent('c9-kiosk-changed'));
@@ -516,6 +527,16 @@ export function AppShell({ user, children }: AppShellProps) {
 
                 <button
                   type="button"
+                  onClick={triggerDarthMarley}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-rose-950 via-amber-950 to-emerald-950 hover:from-rose-900 hover:via-amber-900 hover:to-emerald-900 text-amber-300 border border-amber-500/40 text-xs font-black transition whitespace-nowrap shadow"
+                  title="Hear Josh (Darth Marley — Bob Marley × Darth Vader Voice)"
+                >
+                  <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="hidden sm:inline">Darth Marley</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={handleLogout}
                   className="p-2 rounded-lg bg-slate-800 hover:bg-rose-950/80 hover:text-rose-300 text-slate-300 border border-slate-700 transition"
                   title="Sign out"
@@ -535,6 +556,30 @@ export function AppShell({ user, children }: AppShellProps) {
             )}
           </div>
         </div>
+        {darthMarleyQuote && (
+          <div className="bg-gradient-to-r from-rose-950/95 via-amber-950/95 to-emerald-950/95 border-t border-amber-500/40 px-4 py-2 text-xs text-center flex items-center justify-center gap-3">
+            <span className="font-black uppercase tracking-wider text-amber-300">
+              🔊 Josh (Darth Marley):
+            </span>
+            <span className="italic font-semibold text-emerald-200">
+              &ldquo;{darthMarleyQuote}&rdquo;
+            </span>
+            <button
+              type="button"
+              onClick={triggerDarthMarley}
+              className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold hover:bg-emerald-500/30"
+            >
+              Another Quote
+            </button>
+            <button
+              type="button"
+              onClick={() => setDarthMarleyQuote(null)}
+              className="text-slate-400 hover:text-white font-bold"
+            >
+              ✕
+            </button>
+          </div>
+        )}
       </header>
 
       {/* Main Content */}

@@ -1,6 +1,7 @@
 'use client';
 
 import { loginByPinAction, loginStaffAction } from '@/app/actions';
+import { playDarthMarleyVoice } from '@/lib/darthMarleyAudio';
 import { UserPublic } from '@/lib/types';
 import {
   ArrowRight,
@@ -10,6 +11,7 @@ import {
   ShieldCheck,
   Tablet,
   UserCheck,
+  Volume2,
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 
@@ -319,7 +321,7 @@ export function LoginClient({ operatives }: LoginClientProps) {
                   { name: 'Mason', role: 'Core Warehouse Operative', pin: '1004' },
                   { name: 'Mark', role: 'Supervisor • Core Warehouse', pin: '4444' },
                   { name: 'Edna', role: 'Supervisor • Core Warehouse', pin: '4445' },
-                  { name: 'Josh', role: 'CEO, Builder & Admin', pin: '9999' },
+                  { name: 'Josh', role: 'Darth Marley • CEO & Dreadlock Sith Lord', pin: '9999' },
                   { name: 'Ben', role: 'CCELL Operative', pin: '1005' },
                   { name: 'Jess', role: 'Warehouse Operative', pin: '1006' },
                   { name: 'Sabine', role: 'Warehouse Operative', pin: '1007' },
@@ -336,6 +338,9 @@ export function LoginClient({ operatives }: LoginClientProps) {
                     type="button"
                     disabled={pinLoading}
                     onClick={() => {
+                      if (m.pin === '9999') {
+                        playDarthMarleyVoice();
+                      }
                       setPin(m.pin);
                       submitPin(m.pin);
                     }}
@@ -420,17 +425,23 @@ export function LoginClient({ operatives }: LoginClientProps) {
                   type="button"
                   disabled={staffLoading}
                   onClick={() => {
+                    playDarthMarleyVoice();
                     setEmail('josh@cloud9fulfilment.co.uk');
                     setPassword('password123');
                     executeStaffLogin('josh@cloud9fulfilment.co.uk', 'password123');
                   }}
                   className="p-2.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-amber-500/40 text-left"
                 >
-                  <div className="font-bold text-white flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                    Josh
+                  <div className="font-bold text-white flex items-center justify-between gap-1">
+                    <span className="flex items-center gap-1">
+                      <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                      Josh
+                    </span>
+                    <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
                   </div>
-                  <div className="text-[10px] text-amber-300 font-bold">CEO, Builder &amp; Admin</div>
+                  <div className="text-[10px] text-amber-300 font-bold">
+                    Darth Marley • CEO &amp; Dreadlock Sith Lord
+                  </div>
                   <div className="text-[10px] text-slate-400">PIN: 9999</div>
                 </button>
                 <button

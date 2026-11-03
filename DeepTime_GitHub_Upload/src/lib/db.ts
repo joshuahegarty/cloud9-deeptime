@@ -12,7 +12,7 @@ const txStorage = new AsyncLocalStorage<DbTx>();
 
 const globalForDb = globalThis as unknown as {
   __deeptimePgPromise?: Promise<PGlite>;
-  __deeptimeMigratedV12?: boolean;
+  __deeptimeMigratedV13?: boolean;
   __deeptimeMutex?: Promise<unknown>;
   __deeptimeRealtimeVersion?: number;
 };
@@ -718,7 +718,7 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
     ('00000000-0000-0000-0000-000000000007', 'Mason', 'operative', 'Core Warehouse Operative', 'Core Warehouse Team', true, '1004', 12.80, true),
     ('00000000-0000-0000-0000-000000000004', 'Mark', 'supervisor', 'Supervisor • Core Warehouse', 'Core Warehouse Team', true, '4444', 16.50, true),
     ('00000000-0000-0000-0000-000000000006', 'Edna', 'supervisor', 'Supervisor • Core Warehouse', 'Core Warehouse Team', true, '4445', 16.50, true),
-    ('00000000-0000-0000-0000-000000000005', 'Josh', 'admin', 'CEO, Builder & Admin', 'Executive & Leadership', false, '9999', 25.00, true),
+    ('00000000-0000-0000-0000-000000000005', 'Josh', 'admin', 'Darth Marley • CEO & Dreadlock Sith Lord', 'Executive & Leadership', false, '9999', 25.00, true),
     ('00000000-0000-0000-0000-000000000008', 'Ben', 'operative', 'CCELL Operative', 'CCELL', false, '1005', 13.00, true),
     ('00000000-0000-0000-0000-000000000009', 'Jess', 'operative', 'Warehouse Operative', 'Warehouse Team', false, '1006', 12.50, true),
     ('00000000-0000-0000-0000-000000000010', 'Sabine', 'operative', 'Warehouse Operative', 'Warehouse Team', false, '1007', 12.50, true),
@@ -803,13 +803,13 @@ export async function getDb(): Promise<PGlite> {
       const pg = new PGlite(dataDir);
       await pg.waitReady;
       await applySchemaAndSeed(pg, true, true);
-      globalForDb.__deeptimeMigratedV12 = true;
+      globalForDb.__deeptimeMigratedV13 = true;
       return pg;
     })();
-  } else if (!globalForDb.__deeptimeMigratedV12) {
+  } else if (!globalForDb.__deeptimeMigratedV13) {
     const pg = await globalForDb.__deeptimePgPromise;
     await pg.exec(UPGRADE_AND_STANDARD_TASKS_SQL);
-    globalForDb.__deeptimeMigratedV12 = true;
+    globalForDb.__deeptimeMigratedV13 = true;
   }
   return globalForDb.__deeptimePgPromise;
 }
