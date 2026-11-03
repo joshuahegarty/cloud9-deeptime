@@ -2,6 +2,7 @@
 
 import { kioskTapOperativeAction, loginByPinAction } from '@/app/actions';
 import { formatElapsedHMS, formatLondonTime } from '@/lib/calculations';
+import { getRoleBadgeClass } from '@/lib/roleBadge';
 import { Attendance, TimeEntry, UserPublic } from '@/lib/types';
 import {
   ArrowRight,
@@ -269,7 +270,11 @@ export function KioskClient({ rows }: { rows: KioskRow[] }) {
                         <span className="text-[18px] font-semibold text-[#E8E8E8] tracking-tight group-hover:text-white transition">
                           {operative.display_name}
                         </span>
-                        <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-sky-300 text-[10px] font-bold">
+                        <span
+                          className={`px-2 py-0.5 rounded border text-[10px] font-bold ${getRoleBadgeClass(
+                            operative.job_title
+                          )}`}
+                        >
                           {operative.job_title || 'Warehouse Operative'}
                         </span>
                       </div>

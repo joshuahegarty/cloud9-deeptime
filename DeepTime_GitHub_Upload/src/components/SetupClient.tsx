@@ -7,6 +7,7 @@ import {
   upsertUserAction,
 } from '@/app/actions';
 import { AppSettings, Client, Role, TaskType, UserAdmin } from '@/lib/types';
+import { getRoleBadgeClass } from '@/lib/roleBadge';
 import {
   Building2,
   Check,
@@ -612,7 +613,11 @@ export function SetupClient({
                       <div className="text-xs font-mono text-slate-400">{u.email}</div>
                     </td>
                     <td className="py-3.5 px-4">
-                      <span className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700 text-sky-300 text-xs font-bold">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-1 rounded-lg border text-xs font-bold ${getRoleBadgeClass(
+                          u.job_title || u.role
+                        )}`}
+                      >
                         {u.job_title || u.role}
                       </span>
                     </td>

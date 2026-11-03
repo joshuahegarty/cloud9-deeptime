@@ -29,6 +29,7 @@ import {
   WifiOff,
 } from 'lucide-react';
 import React, { useState } from 'react';
+import { getRoleBadgeClass } from '@/lib/roleBadge';
 import { VideoPodcastStudio } from './VideoPodcastStudio';
 
 type GuideSection =
@@ -565,7 +566,11 @@ export function GuideClient() {
                     <td className={`py-2.5 px-4 font-bold ${m.color}`}>{m.access}</td>
                     <td className="py-2.5 px-4 font-bold text-white print:text-slate-950">{m.name}</td>
                     <td className="py-2.5 px-4">
-                      <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-sky-300 text-[11px] font-bold">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded border text-[11px] font-bold ${getRoleBadgeClass(
+                          m.title
+                        )}`}
+                      >
                         {m.title}
                       </span>
                     </td>

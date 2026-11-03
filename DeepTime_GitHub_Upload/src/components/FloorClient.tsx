@@ -11,6 +11,7 @@ import {
   stopTaskAction,
 } from '@/app/actions';
 import { formatElapsedHMS, formatLondonTime } from '@/lib/calculations';
+import { getRoleBadgeClass } from '@/lib/roleBadge';
 import { getSupabaseBrowserClient } from '@/lib/supabase';
 import { AppSettings, Attendance, Client, TaskType, TimeEntry, UserPublic } from '@/lib/types';
 import {
@@ -876,6 +877,7 @@ export function FloorClient({
             <thead>
               <tr className="border-b border-slate-800 bg-slate-950/60 text-[12px] font-bold uppercase tracking-[1px] text-[#E8E8E8]">
                 <th className="py-3.5 px-4">Operative</th>
+                <th className="py-3.5 px-4">Role</th>
                 <th className="py-3.5 px-4">Status</th>
                 <th className="py-3.5 px-4">Client</th>
                 <th className="py-3.5 px-4">Current Task</th>
@@ -944,17 +946,22 @@ export function FloorClient({
                     }`}
                   >
                     <td className="py-4 px-4 font-semibold text-[#E8E8E8] text-[15px]">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span>{operative.display_name}</span>
-                        <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-sky-300 text-[10px] font-bold">
-                          {operative.job_title || 'Warehouse Operative'}
-                        </span>
-                      </div>
+                      <div>{operative.display_name}</div>
                       {attendance && (
                         <div className="text-[11px] font-normal text-[#888888] mt-1">
                           In since {formatLondonTime(attendance.clock_in)}
                         </div>
                       )}
+                    </td>
+
+                    <td className="py-4 px-4">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-1 rounded-lg border text-xs font-bold ${getRoleBadgeClass(
+                          operative.job_title
+                        )}`}
+                      >
+                        {operative.job_title || 'Warehouse Operative'}
+                      </span>
                     </td>
 
                     <td className="py-4 px-4">

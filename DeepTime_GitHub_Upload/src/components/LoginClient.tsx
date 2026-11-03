@@ -1,6 +1,7 @@
 'use client';
 
 import { loginByPinAction, loginStaffAction } from '@/app/actions';
+import { getRoleBadgeClass } from '@/lib/roleBadge';
 import { UserPublic } from '@/lib/types';
 import {
   ArrowRight,
@@ -342,7 +343,15 @@ export function LoginClient({ operatives }: LoginClientProps) {
                     className="p-2 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left transition"
                   >
                     <div className="font-bold text-white text-xs">{m.name}</div>
-                    <div className="text-[10px] text-sky-300 truncate">{m.role}</div>
+                    <div className="mt-1 mb-0.5">
+                      <span
+                        className={`inline-block px-1.5 py-0.5 rounded border text-[9px] font-bold truncate max-w-full ${getRoleBadgeClass(
+                          m.role
+                        )}`}
+                      >
+                        {m.role}
+                      </span>
+                    </div>
                     <div className="text-emerald-400 font-mono text-[10px]">PIN: {m.pin}</div>
                   </button>
                 ))}
