@@ -37,6 +37,7 @@ function getInitials(name: string): string {
 export function KioskClient({ rows }: { rows: KioskRow[] }) {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<'grid' | 'pin'>('grid');
+  const [showOtherKioskStaff, setShowOtherKioskStaff] = useState(false);
   const [requirePinOnTap, setRequirePinOnTap] = useState(false);
   const [pinModalUser, setPinModalUser] = useState<UserPublic | null>(null);
   const [pin, setPin] = useState('');
@@ -225,141 +226,186 @@ export function KioskClient({ rows }: { rows: KioskRow[] }) {
       )}
 
       {viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {rows.map(({ operative, attendance, runningEntry }) => {
-            const isClockedIn = Boolean(attendance);
-            const isRunning = Boolean(runningEntry);
-            const isBusy = loadingId === operative.id;
-            const elapsedSec = runningEntry
-              ? Math.max(
-                  0,
-                  Math.floor((nowMs - new Date(runningEntry.started_at).getTime()) / 1000)
-                )
-              : 0;
+        <div className="space-y-5">
+          {(() => {
+            const primaryRows = rows.filter(
+              (r) =>
+                Boolean(r.operative.is_core_warehouse) ||
+                Boolean(r.attendance) ||
+                Boolean(r.runningEntry)
+            );
+            const otherRows = rows.filter(
+              (r) =>
+                !r.operative.is_core_warehouse &&
+                !r.attendance &&
+                !r.runningEntry
+            );
 
-            return (
-              <button
-                key={operative.id}
-                type="button"
-                disabled={isBusy}
-                onClick={() => handleTapOperative(operative)}
-                className={`group text-left p-6 rounded-3xl border transition-all duration-150 active:scale-[0.99] flex flex-col justify-between min-h-[215px] shadow-xl card-interactive border-l-[3px] ${
-                  isRunning
-                    ? 'bg-gradient-to-b from-cyan-950/35 to-slate-900 border-[#22D3EE]/70 border-l-[#22D3EE] shadow-[0_0_20px_rgba(34,211,238,0.15)]'
-                    : isClockedIn
-                    ? 'bg-gradient-to-b from-amber-950/25 to-slate-900 border-[#FB923C]/60 border-l-[#FB923C]'
-                    : 'bg-slate-900 border-slate-800 border-l-[#888888] opacity-85 hover:opacity-100'
-                }`}
-              >
-                {/* Card Top: Avatar + Name + Role Tag + Status Pill */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3.5">
-                    <div
-                      className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-base tracking-tight shrink-0 border ${
-                        isRunning
-                          ? 'bg-[#22D3EE] text-slate-950 border-cyan-300 shadow-md shadow-cyan-500/20'
-                          : isClockedIn
-                          ? 'bg-orange-500/20 text-[#FB923C] border-orange-500/40'
-                          : 'bg-slate-800 text-slate-200 border-slate-700 group-hover:border-cyan-500/40 group-hover:text-[#22D3EE]'
-                      }`}
-                    >
-                      {getInitials(operative.display_name)}
-                    </div>
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-[18px] font-semibold text-[#E8E8E8] tracking-tight group-hover:text-white transition">
-                          {operative.display_name}
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 rounded border text-[10px] font-bold ${getRoleBadgeClass(
-                            operative.job_title
-                          )}`}
-                        >
-                          {operative.job_title || 'Warehouse Operative'}
-                        </span>
+            const renderKioskCard = ({ operative, attendance, runningEntry }: KioskRow) => {
+              const isClockedIn = Boolean(attendance);
+              const isRunning = Boolean(runningEntry);
+              const isBusy = loadingId === operative.id;
+              const elapsedSec = runningEntry
+                ? Math.max(
+                    0,
+                    Math.floor((nowMs - new Date(runningEntry.started_at).getTime()) / 1000)
+                  )
+                : 0;
+
+              return (
+                <button
+                  key={operative.id}
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => handleTapOperative(operative)}
+                  className={`group text-left p-6 rounded-3xl border transition-all duration-150 active:scale-[0.99] flex flex-col justify-between min-h-[215px] shadow-xl card-interactive border-l-[3px] ${
+                    isRunning
+                      ? 'bg-gradient-to-b from-cyan-950/35 to-slate-900 border-[#22D3EE]/70 border-l-[#22D3EE] shadow-[0_0_20px_rgba(34,211,238,0.15)]'
+                      : isClockedIn
+                      ? 'bg-gradient-to-b from-amber-950/25 to-slate-900 border-[#FB923C]/60 border-l-[#FB923C]'
+                      : 'bg-slate-900 border-slate-800 border-l-[#888888] opacity-85 hover:opacity-100'
+                  }`}
+                >
+                  {/* Card Top: Avatar + Name + Role Tag + Status Pill */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3.5">
+                      <div
+                        className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-base tracking-tight shrink-0 border ${
+                          isRunning
+                            ? 'bg-[#22D3EE] text-slate-950 border-cyan-300 shadow-md shadow-cyan-500/20'
+                            : isClockedIn
+                            ? 'bg-orange-500/20 text-[#FB923C] border-orange-500/40'
+                            : 'bg-slate-800 text-slate-200 border-slate-700 group-hover:border-cyan-500/40 group-hover:text-[#22D3EE]'
+                        }`}
+                      >
+                        {getInitials(operative.display_name)}
                       </div>
-                      <div className="text-[12px] font-normal text-[#888888] mt-0.5">
-                        {isClockedIn && attendance
-                          ? `Clocked in at ${formatLondonTime(attendance.clock_in)}`
-                          : 'Ready to start shift'}
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[18px] font-semibold text-[#E8E8E8] tracking-tight group-hover:text-white transition">
+                            {operative.display_name}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded border text-[10px] font-bold ${getRoleBadgeClass(
+                              operative.job_title
+                            )}`}
+                          >
+                            {operative.job_title || 'Warehouse Operative'}
+                          </span>
+                        </div>
+                        <div className="text-[12px] font-normal text-[#888888] mt-0.5">
+                          {isClockedIn && attendance
+                            ? `Clocked in at ${formatLondonTime(attendance.clock_in)}`
+                            : 'Ready to start shift'}
+                        </div>
                       </div>
                     </div>
+
+                    {isRunning ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase bg-[#22D3EE] text-slate-950 shrink-0 shadow">
+                        <Play className="w-3 h-3 fill-current" />
+                        On Task
+                      </span>
+                    ) : isClockedIn ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase bg-[#FB923C] text-slate-950 shrink-0">
+                        <Clock className="w-3 h-3" />
+                        Idle
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase bg-slate-950 text-[#888888] border border-slate-800 shrink-0">
+                        Clocked Out
+                      </span>
+                    )}
                   </div>
 
-                  {isRunning ? (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase bg-[#22D3EE] text-slate-950 shrink-0 shadow">
-                      <Play className="w-3 h-3 fill-current" />
-                      On Task
-                    </span>
-                  ) : isClockedIn ? (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase bg-[#FB923C] text-slate-950 shrink-0">
-                      <Clock className="w-3 h-3" />
-                      Idle
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase bg-slate-950 text-[#888888] border border-slate-800 shrink-0">
-                      Clocked Out
-                    </span>
-                  )}
-                </div>
-
-                {/* Middle: Active Task Box or Idle Notice */}
-                <div className="my-4">
-                  {isRunning && runningEntry ? (
-                    <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-[#22D3EE]/30 flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="px-2 py-0.5 rounded bg-[#10B981] text-slate-950 font-mono text-[10px] font-bold">
-                            {runningEntry.client_code}
-                          </span>
-                          <span className="text-[12px] text-[#888888] truncate">
-                            {runningEntry.client_name}
-                          </span>
+                  {/* Middle: Active Task Box or Idle Notice */}
+                  <div className="my-4">
+                    {isRunning && runningEntry ? (
+                      <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-[#22D3EE]/30 flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="px-2 py-0.5 rounded bg-[#10B981] text-slate-950 font-mono text-[10px] font-bold">
+                              {runningEntry.client_code}
+                            </span>
+                            <span className="text-[12px] text-[#888888] truncate">
+                              {runningEntry.client_name}
+                            </span>
+                          </div>
+                          <div className="font-semibold text-[#E8E8E8] text-[15px] mt-1 truncate">
+                            {runningEntry.task_name}
+                          </div>
                         </div>
-                        <div className="font-semibold text-[#E8E8E8] text-[15px] mt-1 truncate">
-                          {runningEntry.task_name}
+                        <div className="font-mono text-base font-black text-[#22D3EE] shrink-0">
+                          {formatElapsedHMS(elapsedSec)}
                         </div>
                       </div>
-                      <div className="font-mono text-base font-black text-[#22D3EE] shrink-0">
-                        {formatElapsedHMS(elapsedSec)}
+                    ) : isClockedIn ? (
+                      <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-[#FB923C]/25 text-xs font-semibold text-[#FB923C]">
+                        Clocked in — no active task running right now
                       </div>
-                    </div>
-                  ) : isClockedIn ? (
-                    <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-[#FB923C]/25 text-xs font-semibold text-[#FB923C]">
-                      Clocked in — no active task running right now
-                    </div>
-                  ) : (
-                    <div className="p-3.5 rounded-2xl bg-slate-950/50 border border-slate-800/80 text-[12px] text-[#888888]">
-                      Tap card to clock in for today&apos;s shift &amp; pick your first task
-                    </div>
-                  )}
+                    ) : (
+                      <div className="p-3.5 rounded-2xl bg-slate-950/50 border border-slate-800/80 text-[12px] text-[#888888]">
+                        Tap card to clock in for today&apos;s shift &amp; pick your first task
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Card Footer CTA */}
+                  <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-sm font-black">
+                    {isRunning ? (
+                      <>
+                        <span className="text-[#22D3EE]">Manage or Stop Task</span>
+                        <ArrowRight className="w-4 h-4 text-[#22D3EE] group-hover:translate-x-1 transition-transform" />
+                      </>
+                    ) : isClockedIn ? (
+                      <>
+                        <span className="text-[#FB923C]">Select a Task to Start</span>
+                        <ArrowRight className="w-4 h-4 text-[#FB923C] group-hover:translate-x-1 transition-transform" />
+                      </>
+                    ) : (
+                      <>
+                        <span className="flex items-center gap-2 text-slate-200 group-hover:text-[#22D3EE] transition">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          Tap to Clock In &amp; Start
+                        </span>
+                        <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-[#22D3EE] group-hover:translate-x-1 transition-all" />
+                      </>
+                    )}
+                  </div>
+                </button>
+              );
+            };
+
+            return (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {primaryRows.map(renderKioskCard)}
                 </div>
 
-                {/* Card Footer CTA */}
-                <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-sm font-black">
-                  {isRunning ? (
-                    <>
-                      <span className="text-[#22D3EE]">Manage or Stop Task</span>
-                      <ArrowRight className="w-4 h-4 text-[#22D3EE] group-hover:translate-x-1 transition-transform" />
-                    </>
-                  ) : isClockedIn ? (
-                    <>
-                      <span className="text-[#FB923C]">Select a Task to Start</span>
-                      <ArrowRight className="w-4 h-4 text-[#FB923C] group-hover:translate-x-1 transition-transform" />
-                    </>
-                  ) : (
-                    <>
-                      <span className="flex items-center gap-2 text-slate-200 group-hover:text-[#22D3EE] transition">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                        Tap to Clock In &amp; Start
+                {otherRows.length > 0 && (
+                  <div className="rounded-2xl bg-slate-900/90 border border-slate-800 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setShowOtherKioskStaff((prev) => !prev)}
+                      className="w-full px-5 py-4 flex flex-wrap items-center justify-between gap-2 text-left hover:bg-slate-800/60 transition"
+                    >
+                      <span className="text-sm font-black uppercase tracking-wider text-slate-200">
+                        {showOtherKioskStaff ? '▾ Hide' : '▸ Show'} Other Team Members ({otherRows.length})
                       </span>
-                      <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-[#22D3EE] group-hover:translate-x-1 transition-all" />
-                    </>
-                  )}
-                </div>
-              </button>
+                      <span className="text-xs text-slate-400 font-semibold">
+                        {otherRows.map((r) => r.operative.display_name).join(', ')}
+                      </span>
+                    </button>
+                    {showOtherKioskStaff && (
+                      <div className="p-5 pt-2 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                        {otherRows.map(renderKioskCard)}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
             );
-          })}
+          })()}
         </div>
       ) : (
         <div className="max-w-md mx-auto bg-slate-900 border border-slate-800 rounded-3xl p-7 shadow-2xl">

@@ -36,6 +36,7 @@ export function LoginClient({ operatives }: LoginClientProps) {
 
   // Operative PIN state
   const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [showOtherLoginStaff, setShowOtherLoginStaff] = useState(false);
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -307,12 +308,12 @@ export function LoginClient({ operatives }: LoginClientProps) {
               <ArrowRight className="w-5 h-5" />
             </button>
 
-            {/* Unified 1-Click PIN Helper for Cloud9 Team */}
-            <div className="mt-6 pt-4 border-t border-slate-800 text-xs text-slate-400 space-y-2">
+            {/* Core Warehouse Team + Collapsible Other Team Members */}
+            <div className="mt-6 pt-4 border-t border-slate-800 text-xs text-slate-400 space-y-2.5">
               <div className="font-bold text-slate-300 uppercase tracking-wider">
-                1-Click PIN Sign-In:
+                Core Warehouse Team (1-Click PIN Sign-In):
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto pr-1">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {[
                   { name: 'Erica', role: 'Core Warehouse Operative', pin: '1111' },
                   { name: 'Sam', role: 'Core Warehouse Operative', pin: '2222' },
@@ -321,16 +322,6 @@ export function LoginClient({ operatives }: LoginClientProps) {
                   { name: 'Mark', role: 'Supervisor • Core Warehouse', pin: '4444' },
                   { name: 'Edna', role: 'Supervisor • Core Warehouse', pin: '4445' },
                   { name: 'Josh', role: 'CEO, Builder & Admin', pin: '9999' },
-                  { name: 'Ben', role: 'CCELL Operative', pin: '1005' },
-                  { name: 'Jess', role: 'Warehouse Operative', pin: '1006' },
-                  { name: 'Sabine', role: 'Warehouse Operative', pin: '1007' },
-                  { name: 'Dan Igel', role: 'Head of People & Operations', pin: '1008' },
-                  { name: 'Billy', role: 'Operations', pin: '1009' },
-                  { name: 'Mike', role: 'Sales', pin: '1010' },
-                  { name: 'Ray', role: 'Sales • Warehouse Operative', pin: '1011' },
-                  { name: 'Adrian', role: 'Marketing & Innovations', pin: '1012' },
-                  { name: 'Danny', role: 'Marketing & Innovations', pin: '1013' },
-                  { name: 'Ashton', role: 'Marketing & Innovations', pin: '1014' },
                 ].map((m) => (
                   <button
                     key={m.pin}
@@ -356,6 +347,59 @@ export function LoginClient({ operatives }: LoginClientProps) {
                   </button>
                 ))}
               </div>
+
+              <button
+                type="button"
+                onClick={() => setShowOtherLoginStaff((prev) => !prev)}
+                className="w-full px-3 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left font-bold text-slate-300 flex items-center justify-between transition"
+              >
+                <span>
+                  {showOtherLoginStaff ? '▾ Hide' : '▸ Show'} Other Team Members (10)
+                </span>
+                <span className="text-[10px] text-slate-400 font-normal truncate max-w-[180px]">
+                  Ben, Jess, Sabine, Dan Igel, Billy, Mike, Ray, Adrian, Danny, Ashton
+                </span>
+              </button>
+
+              {showOtherLoginStaff && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+                  {[
+                    { name: 'Ben', role: 'CCELL Operative', pin: '1005' },
+                    { name: 'Jess', role: 'Warehouse Operative', pin: '1006' },
+                    { name: 'Sabine', role: 'Warehouse Operative', pin: '1007' },
+                    { name: 'Dan Igel', role: 'Head of People & Operations', pin: '1008' },
+                    { name: 'Billy', role: 'Operations', pin: '1009' },
+                    { name: 'Mike', role: 'Sales', pin: '1010' },
+                    { name: 'Ray', role: 'Sales • Warehouse Operative', pin: '1011' },
+                    { name: 'Adrian', role: 'Marketing & Innovations', pin: '1012' },
+                    { name: 'Danny', role: 'Marketing & Innovations', pin: '1013' },
+                    { name: 'Ashton', role: 'Marketing & Innovations', pin: '1014' },
+                  ].map((m) => (
+                    <button
+                      key={m.pin}
+                      type="button"
+                      disabled={pinLoading}
+                      onClick={() => {
+                        setPin(m.pin);
+                        submitPin(m.pin);
+                      }}
+                      className="p-2 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left transition"
+                    >
+                      <div className="font-bold text-white text-xs">{m.name}</div>
+                      <div className="mt-1 mb-0.5">
+                        <span
+                          className={`inline-block px-1.5 py-0.5 rounded border text-[9px] font-bold truncate max-w-full ${getRoleBadgeClass(
+                            m.role
+                          )}`}
+                        >
+                          {m.role}
+                        </span>
+                      </div>
+                      <div className="text-emerald-400 font-mono text-[10px]">PIN: {m.pin}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ) : (
