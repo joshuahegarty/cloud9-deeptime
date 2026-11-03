@@ -1,0 +1,84 @@
+import { describe, expect, it } from 'vitest';
+import { REEL_LETTERS } from '@/components/AlphabeticalReelWheel';
+import { createTestDb, withDbSession } from '@/lib/db';
+
+const MULTI_CLIENT_ID = '10000000-0000-0000-0000-000000000000';
+const OPERATIVE_ID = '00000000-0000-0000-0000-000000000003'; // Tariq (no running entry in seed)
+const STANDARD_TASK_PICK_ID = '20000000-0000-0000-0000-000000000101'; // STD-PICK
+const CUSTOM_TASK_PDN_PICK = '20000000-0000-0000-0000-000000000001'; // PDN-PICK
+const CLIENT_PDN = '10000000-0000-0000-0000-000000000001';
+const CLIENT_SCA = '10000000-0000-0000-0000-000000000002';
+
+describe('Alphabetical Reel & Multi-Client Task Selection', () => {
+  it('defines 28 slot positions with ALL, A-Z, and # for the arcade wheel', () => {
+    expect(REEL_LETTERS.length).toBe(28);
+    expect(REEL_LETTERS[0]).toBe('ALL');
+    expect(REEL_LETTERS[1]).toBe('A');
+    expect(REEL_LETTERS[26]).toBe('Z');
+    expect(REEL_LETTERS[27]).toBe('#');
+  });
+
+  it('allows starting a universal standard warehouse task under Multi-Client', async () => {
+    const pg = await createTestDb(true);
+
+    // Insert Multi-Client record
+    await pg.query(
+      `insert into clients (id, name, code, rounding_minutes, billable_default, active)
+       values ($1, 'Multi-Client / Consolidated', 'MULTI', 15, true, true)
+       on conflict (id) do nothing`,
+      [MULTI_CLIENT_ID]
+    );
+
+    // Insert Standard Task
+    await pg.query(
+      `insert into task_types (id, client_id, is_standard, category, name, code, standard_minutes, unit_label, billable, rate, barcode, sort_order, active)
+       values ($1, null, true, 'Pick & Pack', 'Standard Order Pick & Pack', 'STD-PICK', 1.50, 'orders', true, 24.00, 'BC-STD-PICK', 10, true)
+       on conflict (id) do nothing`,
+      [STANDARD_TASK_PICK_ID]
+    );
+
+    // Start a standard task under Multi-Client
+    await withDbSession(
+      OPERATIVE_ID,
+      async (tx) => {
+        const res = await tx.query(
+          `insert into time_entries (user_id, client_id, task_type_id, started_at, ended_at, billable, source, created_by)
+           values ($1, $2, $3, now(), null, true, 'picked', $1)
+           returning id, client_id, task_type_id`,
+          [OPERATIVE_ID, MULTI_CLIENT_ID, STANDARD_TASK_PICK_ID]
+        );
+        expect(res.rows.length).toBe(1);
+        expect(res.rows[0].client_id).toBe(MULTI_CLIENT_ID);
+        expect(res.rows[0].task_type_id).toBe(STANDARD_TASK_PICK_ID);
+      },
+      pg
+    );
+  });
+
+  it('enforces that bespoke custom tasks must match the client id', async () => {
+    const pg = await createTestDb(true);
+
+    // Inserting a custom task belonging to CLIENT_PDN under CLIENT_SCA fails
+    await expect(
+      withDbSession(
+        OPERATIVE_ID,
+        async (tx) => {
+          await tx.query(
+            `insert into time_entries (user_id, client_id, task_type_id, started_at, ended_at, billable, source, created_by)
+             values ($1, $2, $3, now(), null, true, 'picked', $1)`,
+            [OPERATIVE_ID, CLIENT_SCA, CUSTOM_TASK_PDN_PICK]
+          );
+        },
+        pg
+      )
+    ).rejects.toThrow(/must match task_types\.client_id/);
+  });
+
+  it('ensures all standard and custom tasks default unit_label to units when null so closing always declares quantity completed', async () => {
+    const pg = await createTestDb(true);
+    const res = await pg.query<{ code: string; unit_label: string | null }>(
+      `select code, unit_label from task_types where unit_label is null or trim(unit_label) = ''`
+    );
+    expect(res.rows.length).toBe(0);
+  });
+});

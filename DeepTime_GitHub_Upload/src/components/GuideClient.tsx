@@ -262,12 +262,12 @@ export function GuideClient() {
               <text x="696" y="54" fill="#a7f3d0" fontSize="10">Tap your name card → clocks in automatically → returns to Kiosk in 1.5s</text>
 
               <rect x="680" y="72" width="420" height="44" rx="9" fill="#064e3b" stroke="#10b981" strokeWidth="1.5" />
-              <text x="696" y="91" fill="#ffffff" fontSize="11.5" fontWeight="800">1B. Start Job: 3D Wheel, Barcode Scan, or Recent Chip (/now)</text>
-              <text x="696" y="106" fill="#a7f3d0" fontSize="10">Pick Client &amp; Task (or scan laminated bench barcode) → starts timer</text>
+              <text x="696" y="91" fill="#ffffff" fontSize="11.5" fontWeight="800">1B. Start Job: #1 Default Standard Order Pick, Goods-In (Cont/Pal/Box) or Scan</text>
+              <text x="696" y="106" fill="#a7f3d0" fontSize="10">Top Quick Bar (Assigned/Recent/Favs), Goods-In Sub-Buttons, Projects &amp; Internal Housekeeping</text>
 
               <rect x="680" y="124" width="420" height="44" rx="9" fill="#064e3b" stroke="#10b981" strokeWidth="1.5" />
-              <text x="696" y="143" fill="#ffffff" fontSize="11.5" fontWeight="800">1C. Mandatory Quantity Prompt on Every Task Close</text>
-              <text x="696" y="158" fill="#a7f3d0" fontSize="10">Stopping or switching ANY task (general or custom) asks: &quot;How many units completed?&quot;</text>
+              <text x="696" y="143" fill="#ffffff" fontSize="11.5" fontWeight="800">1C. Live Tally (+1/+5/+10), Wrong-Task Swap &amp; Smart Close Prompt</text>
+              <text x="696" y="158" fill="#a7f3d0" fontSize="10">Standard Pick/Pack closes optionally; Bespoke/Goods-In/Pallet tasks prompt for units</text>
 
               {/* LANE 2: Floor Supervisor (Centered at Y=244) */}
               <rect x="355" y="210" width="225" height="68" rx="12" fill="#0f172a" stroke="#38bdf8" strokeWidth="2" />
@@ -279,12 +279,12 @@ export function GuideClient() {
               <path d="M 580 256 C 630 256, 630 270, 680 270" fill="none" stroke="#38bdf8" strokeWidth="1.8" markerEnd="url(#arr-sky)" />
 
               <rect x="680" y="196" width="420" height="44" rx="9" fill="#0c4a6e" stroke="#38bdf8" strokeWidth="1.5" />
-              <text x="696" y="215" fill="#ffffff" fontSize="11.5" fontWeight="800">2A. Live Floor Board &amp; 1-Click Crew Start (/floor)</text>
-              <text x="696" y="230" fill="#bae6fd" fontSize="10">See live timers, assign a container team together, or remotely Stop/Switch</text>
+              <text x="696" y="215" fill="#ffffff" fontSize="11.5" fontWeight="800">2A. Live Floor, Task Assignment, Open Pool &amp; Zone Heatmap (/floor)</text>
+              <text x="696" y="230" fill="#bae6fd" fontSize="10">15m/30m Idle Alerts, Our Cost Approval Queue, Crew Stop Qty &amp; Travel Heatmap</text>
 
               <rect x="680" y="248" width="420" height="44" rx="9" fill="#0c4a6e" stroke="#38bdf8" strokeWidth="1.5" />
-              <text x="696" y="267" fill="#ffffff" fontSize="11.5" fontWeight="800">2B. Timesheet Edits &amp; End-of-Shift Close (/entries)</text>
-              <text x="696" y="282" fill="#bae6fd" fontSize="10">Fix times/quantities with full change history &amp; close open shifts cleanly</text>
+              <text x="696" y="267" fill="#ffffff" fontSize="11.5" fontWeight="800">2B. Timesheet Edits, Urgent Below-Target Filter &amp; 19:00 Auto-Close (/entries)</text>
+              <text x="696" y="282" fill="#bae6fd" fontSize="10">Helm WMS Order Sync, Zero-Productivity Alerts &amp; 19:00 Auto Shift-End Logout</text>
 
               {/* LANE 3: Billing & Finance (Centered at Y=394) */}
               <rect x="355" y="360" width="225" height="68" rx="12" fill="#0f172a" stroke="#f59e0b" strokeWidth="2" />
@@ -596,16 +596,16 @@ export function GuideClient() {
               </div>
               <ol className="space-y-2 text-xs text-slate-300 list-decimal list-inside leading-relaxed print:text-slate-700">
                 <li>
-                  <strong>Shared Kiosk vs. Personal Device</strong>: On a shared tablet (<code className="text-emerald-300">/kiosk</code>), tap your name card. It clocks you in and opens <code className="text-emerald-300">/now?kiosk=1</code>. Once you start a task, it automatically returns to the Kiosk grid after 1.5 seconds for the next colleague.
+                  <strong>3-Way Top Quick Bar &amp; 30-Min Resume</strong>: At the very top of <code className="text-emerald-300">/now</code>, jump straight into <strong>Assigned to You / Open Pool</strong> tasks, your <strong>Last 4 Recent Tasks</strong>, or your starred <strong>Favourites</strong>. Any task stopped within the last 30 minutes has a 1-tap <strong>Resume Last Task</strong> button.
                 </li>
                 <li>
-                  <strong>3D Client &amp; Task Reel Wheels</strong>: Tap a letter (<code className="text-emerald-300">A–Z</code>) or <code className="text-emerald-300">Multi-Client</code> to jump the Client Reel. Filter by Task Category (Pick &amp; Pack, Goods-In, Kitting, etc.) and spin the Task Wheel.
+                  <strong>#1 Default Task (<code className="text-emerald-300">Standard Order Pick</code>) &amp; <code className="text-emerald-300">Standard Order Pack</code></strong>: <strong>Standard Order Pick</strong> (<code className="text-emerald-300">STD-PICK</code>) is always pinned #1 in Universal Standard Warehouse Tasks, followed by <strong>Standard Order Pack</strong> (<code className="text-emerald-300">STD-PACK</code>). Both close cleanly without forcing a mandatory unit count (since Helm WMS tracks order counts).
                 </li>
                 <li>
-                  <strong>Barcode Scanning (<code className="text-emerald-300">BC-STD-*</code>)</strong>: Tap <strong>Scan Barcode</strong> to use a Zebra USB/Bluetooth scanner or tablet camera. Scanning a task barcode starts the job immediately.
+                  <strong>Goods-In Intake Type (<code className="text-emerald-300">Containers</code> | <code className="text-emerald-300">Pallets</code> | <code className="text-emerald-300">Boxes</code>)</strong>: On the <strong>Goods-In</strong> card, tap <strong>📦 Containers</strong> (<code className="text-emerald-300">STD-GIN-CONT</code>), <strong>🪵 Pallets</strong> (<code className="text-emerald-300">STD-GIN-PAL</code>), or <strong>📫 Boxes</strong> (<code className="text-emerald-300">STD-GIN-BOX</code>) to record the exact intake type and unit measure automatically.
                 </li>
                 <li>
-                  <strong>Logging Units on Switch/Stop</strong>: Whenever you switch or stop a task, enter the exact units completed (pallets, cartons, orders) in the modal prompt so your pace is recorded accurately.
+                  <strong>Live Tally (<code className="text-emerald-300">+1 / +5 / +10</code>), Wrong-Task Swap &amp; Voice Mode</strong>: Increment units live while working, swap a wrongly chosen task mid-run without losing elapsed time, tick <em>&ldquo;Accidental start / mistake&rdquo;</em> if needed, or use <strong>Hands-Free Voice Mode</strong>.
                 </li>
               </ol>
             </div>
@@ -617,16 +617,16 @@ export function GuideClient() {
               </div>
               <ol className="space-y-2 text-xs text-slate-300 list-decimal list-inside leading-relaxed print:text-slate-700">
                 <li>
-                  <strong>Crew / Batch Task Assignment</strong>: On <code className="text-sky-300">/floor</code>, tick the checkboxes next to multiple operatives, select the Client, Task Type, and Container/Wave Ref, and click <strong>Start Crew Task</strong>.
+                  <strong>Pre-Assign Queue, Open Pool Broadcast &amp; Crew Start</strong>: Push next tasks to specific operatives, broadcast an <strong>Open Pool Task</strong> (e.g. <em>&ldquo;Need 2 staff for Bay 3 Unload&rdquo;</em>), or tick multiple staff to start/stop a <strong>Crew Task</strong> together (with mandatory crew stop quantity &amp; red zero-productivity warning).
                 </li>
                 <li>
-                  <strong>Remote Stop &amp; Switch</strong>: If an operative leaves for break or switches jobs without tapping the tablet, use the <strong>Stop</strong> or <strong>Switch</strong> action directly on their card on <code className="text-sky-300">/floor</code>.
+                  <strong>Dual Idle Alerts (<code className="text-sky-300">15m / 30m</code>) &amp; Zone Travel Heatmap</strong>: Spot operatives with no active task for 15+ mins or no pulse for 30+ mins, and view the live <strong>Warehouse Zone &amp; Aisle Heatmap</strong> (`Zones A–D`, `Pack Bench`, `Goods-In Bay`, `Dispatch`).
                 </li>
                 <li>
-                  <strong>Editing &amp; Mandatory Unbill Justification</strong>: In <code className="text-sky-300">/entries</code>, click <strong>Edit</strong> to amend times or units. If you change a billable entry to <strong>Our Cost</strong>, you must provide an <strong>Unbilled Reason</strong>.
+                  <strong>Supervisor Approval Queue for <code className="text-sky-300">Our Cost</code></strong>: Whenever an operative starts a Cloud9 Internal / Housekeeping task (Replenishment, Sweeping, Cardboard Clean-Out), it appears in the <code className="text-sky-300">/floor</code> approval banner for 1-click Supervisor sign-off.
                 </li>
                 <li>
-                  <strong>Full Change History</strong>: Click <strong>Audit / History</strong> on any edited row to see every change (previous value, new value, who changed it, and when).
+                  <strong>Below-Target Urgent Filter, Helm WMS Sync &amp; 19:00 Auto-Close</strong>: Filter <code className="text-sky-300">/entries</code> to show only <code className="text-rose-300">&lt;85%</code> pace rows, sync daily order counts via <strong>Helm WMS CSV</strong>, and rely on automatic <strong>19:00 Shift-End Close &amp; Logout</strong>.
                 </li>
               </ol>
             </div>
@@ -638,10 +638,10 @@ export function GuideClient() {
               </div>
               <ol className="space-y-2 text-xs text-slate-300 list-decimal list-inside leading-relaxed print:text-slate-700">
                 <li>
-                  <strong>Intelligent Billing Review Hub</strong>: At the top of <code className="text-amber-300">/entries</code>, review all <strong>Needs Billed</strong> items. Click <strong>Agree</strong> to sign off for invoicing or <strong>Dispute</strong> to flag for investigation.
+                  <strong>Intelligent Billing Review Hub &amp; Clickable Audit Flags</strong>: At the top of <code className="text-amber-300">/entries</code>, review all <strong>Needs Billed</strong> items. In <code className="text-amber-300">/reports/billing</code>, click any amber/red audit flag badge to jump straight to those entries for instant editing.
                 </li>
                 <li>
-                  <strong>Upward Rounding &amp; Margin Analysis</strong>: In <code className="text-amber-300">/reports</code> (Tab 1: <em>By Client &amp; Task</em>), compare raw stopwatch hours against <strong>Rounded Billable Hours</strong>, Revenue (£), Labour Cost (£), and Gross Margin %.
+                  <strong>Upward Rounding Including <code className="text-amber-300">15m Min + 5m Increment</code></strong>: Supports exact time, upward rounding (`5m`, `6m`, `15m`, `30m`, `60m`), and the 3PL special rule: <strong>15m Minimum Charge, then +5m increments</strong> (`15m_min_5m_inc`).
                 </li>
                 <li>
                   <strong>Operative Utilisation &amp; League Table</strong>: Use Tab 2 (<em>By Operative</em>) to track productive task time vs. clocked attendance, and Tab 3 (<em>League Table</em>) to benchmark operatives on identical tasks.
@@ -655,14 +655,14 @@ export function GuideClient() {
             <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-5 space-y-3 print:bg-white print:border-slate-300">
               <div className="flex items-center gap-2 text-purple-400 font-black text-sm">
                 <Settings className="w-4 h-4" />
-                Module D: Admin Setup &amp; Smart Targets (/setup/*)
+                Module D: Admin Setup &amp; Task Architecture (/setup/*)
               </div>
               <ol className="space-y-2 text-xs text-slate-300 list-decimal list-inside leading-relaxed print:text-slate-700">
                 <li>
-                  <strong>Client Rounding &amp; Baseline Maturity</strong>: In <code className="text-purple-300">/setup/clients</code>, set client rounding intervals and promote clients from <em>Learning Phase</em> to <em>Baseline Established</em> or <em>Bossing It</em>.
+                  <strong>Separated Task Architecture (2A / 2B / 2C / 2E)</strong>: Section 2A holds <em>Client-Specific Bespoke Tasks</em>, Section 2B holds <em>Universal Standard 3PL Tasks</em> (never cluttered with internal cleaning), Section 2C holds <em>Collapsible Colour-Coded Bespoke Projects</em>, and Section 2E holds <em>Cloud9 Internal / Housekeeping</em>.
                 </li>
                 <li>
-                  <strong>Standard vs. Bespoke Tasks</strong>: In <code className="text-purple-300">/setup/tasks</code>, maintain universal standard warehouse tasks alongside client-specific bespoke tasks, and print laminated barcode sheets.
+                  <strong>Client Rounding &amp; Baseline Maturity</strong>: In <code className="text-purple-300">/setup/clients</code>, set client rounding intervals (including `15m Min + 5m Inc`) and promote clients from <em>Learning Phase</em> to <em>Baseline Established</em> or <em>Bossing It</em>.
                 </li>
                 <li>
                   <strong>Smart Target Variance Governance</strong>: In <code className="text-purple-300">/setup/targets</code>, review tasks where observed pace differs from standard by ≥10% (after ≥10 runs, ≥30 mins, ≥2 operatives). Managers request changes; Admins approve or reject.
@@ -671,6 +671,74 @@ export function GuideClient() {
                   <strong>Global F8 Triage</strong>: Press <strong>F8</strong> → open the <strong>Submitted Log</strong> tab to triage floor bug reports and feature requests (<code className="text-purple-300">Open → In Progress → Resolved</code>).
                 </li>
               </ol>
+            </div>
+          </div>
+
+          {/* Complete Standard 3PL Tasks vs Cloud9 Internal Housekeeping Reference Table */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 pt-2">
+            <div className="rounded-xl bg-slate-950/90 border border-emerald-500/30 p-5 space-y-3 print:bg-white print:border-slate-300">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
+                    SECTION 2B • BILLABLE / CLIENT CONTRACT
+                  </span>
+                  <h3 className="text-sm font-black text-white print:text-slate-950">
+                    Universal Standard 3PL Warehouse Tasks
+                  </h3>
+                </div>
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-black">
+                  No Housekeeping Clutter
+                </span>
+              </div>
+              <ul className="space-y-1.5 text-xs text-slate-300 print:text-slate-700">
+                <li>• <strong>#1 Default: Standard Order Pick</strong> (<code className="text-emerald-300">STD-PICK</code>) — 1.2m / order • Auto Billed (Optional units on close)</li>
+                <li>• <strong>#2 Default: Standard Order Pack</strong> (<code className="text-emerald-300">STD-PACK</code>) — 1.0m / order • Auto Billed (Optional units on close)</li>
+                <li>• <strong>Goods-In (Containers / Pallets / Boxes)</strong> (<code className="text-emerald-300">STD-GOODSIN</code>) with inline 1-tap sub-buttons:
+                  <div className="pl-4 pt-1 space-y-1 text-[11px] text-amber-300">
+                    <div>↳ <strong>📦 Containers:</strong> Container Unload / De-Vanning (<code className="text-amber-200">STD-GIN-CONT</code>, 90m / container)</div>
+                    <div>↳ <strong>🪵 Pallets:</strong> Pallet Receiving &amp; Check-In (<code className="text-amber-200">STD-GIN-PAL</code>, 10m / pallet)</div>
+                    <div>↳ <strong>📫 Boxes:</strong> Boxes &amp; Carton Receiving (<code className="text-amber-200">STD-GIN-BOX</code>, 1.5m / box)</div>
+                  </div>
+                </li>
+                <li>• <strong>Inbound Putaway to Racking / Pick Face</strong> (<code className="text-emerald-300">STD-PUTAWAY</code>) — 6m / pallet</li>
+                <li>• <strong>B2B / Wholesale Case &amp; Master Carton Pick</strong> (<code className="text-emerald-300">STD-B2B-PICK</code>) — 1.0m / case</li>
+                <li>• <strong>Pallet Build &amp; Wrap</strong> (<code className="text-emerald-300">STD-PALLET-BW</code>) — 8m / pallet • Needs Billed</li>
+                <li>• <strong>Pallet Wrap &amp; Carrier Dispatch</strong> (<code className="text-emerald-300">STD-DISPATCH</code>) — 5m / pallet • Auto Billed</li>
+                <li>• <strong>Container / Wagon Loading &amp; Carrier Handover</strong> (<code className="text-emerald-300">STD-LOAD</code>) — 6m / pallet</li>
+                <li>• <strong>Rework, Relabelling &amp; Barcoding</strong> (<code className="text-emerald-300">STD-REWORK</code>) — 0.5m / unit • Needs Billed</li>
+                <li>• <strong>Kitting, Bundling &amp; Multi-Pack Assembly</strong> (<code className="text-emerald-300">STD-KITTING</code>) — 1.2m / kit • Needs Billed</li>
+                <li>• <strong>Customer Returns Processing &amp; Grading (RMA)</strong> (<code className="text-emerald-300">STD-RETURNS</code>) — 2.5m / return • Needs Billed</li>
+                <li>• <strong>Quality Control (QC) &amp; Batch Inspection</strong> (<code className="text-emerald-300">STD-QC</code>) — 1.0m / unit • Needs Billed</li>
+                <li>• <strong>Stock Take &amp; Cycle Count</strong> (<code className="text-emerald-300">STD-STOCK</code>) — 0.25m / location • Needs Billed</li>
+              </ul>
+            </div>
+
+            <div className="rounded-xl bg-slate-950/90 border border-teal-500/30 p-5 space-y-3 print:bg-white print:border-slate-300">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-teal-400">
+                    SECTION 2E • CLOUD9 INTERNAL OVERHEAD (OUR COST)
+                  </span>
+                  <h3 className="text-sm font-black text-white print:text-slate-950">
+                    Cloud9 Internal / Housekeeping Tasks
+                  </h3>
+                </div>
+                <span className="px-2.5 py-1 rounded-lg bg-teal-500/15 border border-teal-500/30 text-teal-300 text-[10px] font-black">
+                  Supervisor Sign-Off Queue
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed print:text-slate-600">
+                Internal warehouse tasks are completely removed from Universal Standard Warehouse Tasks and live in their own collapsible <strong>Cloud9 Internal / Housekeeping</strong> section at the bottom of <code className="text-teal-300">/now</code>:
+              </p>
+              <ul className="space-y-2 text-xs text-slate-300 print:text-slate-700">
+                <li>• <strong>1. Replenishment (Pick-Face &amp; Forward Locations)</strong> (<code className="text-teal-300">INT-REPLEN</code>) — 6m / pallet • Restocking forward pick bins from bulk racking</li>
+                <li>• <strong>2. Warehouse Sweeping &amp; Aisle Cleaning</strong> (<code className="text-teal-300">STD-CLEAN</code>) — 15m / aisle • Floor sweeping, aisle hygiene &amp; bay cleaning</li>
+                <li>• <strong>3. Cardboard Clean-Out &amp; Baler Crushing</strong> (<code className="text-teal-300">INT-CARDBOARD</code>) — 15m / bale • Clearing empty cartons from pick aisles and loading the baler</li>
+                <li>• <strong>4. Packing Bench Consumables Restock (Boxes, Tape, Void Fill)</strong> (<code className="text-teal-300">INT-CONSUMABLES</code>) — 5m / bench</li>
+                <li>• <strong>5. Empty Pallet Sorting &amp; Loading Bay Clear-Down</strong> (<code className="text-teal-300">INT-PALLETS</code>) — 10m / stack</li>
+                <li>• <strong>6. Forklift / MHE Daily Safety Check &amp; Battery Swap</strong> (<code className="text-teal-300">INT-MHE</code>) — 10m / check</li>
+                <li>• <strong>7. Team Briefing, Shift Handover &amp; Training</strong> (<code className="text-teal-300">INT-BRIEFING</code>) — 15m / session</li>
+              </ul>
             </div>
           </div>
         </section>

@@ -442,6 +442,13 @@ export function NowClient({
     !showScanner &&
     idleSecondsSinceActivity >= settings.idle_prompt_minutes * 60;
 
+  const isHousekeepingOrInternal = (t: TaskType) =>
+    (t.category || '').toLowerCase().includes('housekeeping') ||
+    (t.category || '').toLowerCase().includes('internal') ||
+    t.code === 'STD-CLEAN' ||
+    t.code.startsWith('INT-') ||
+    t.billing_status === 'our_cost';
+
   // Separate tasks into Client-Specific Custom Tasks, Bespoke Projects, Standard Tasks, and Housekeeping
   const customClientTasks = useMemo(
     () =>
@@ -450,6 +457,7 @@ export function NowClient({
         : taskTypes.filter(
             (t) =>
               !t.is_standard &&
+              !isHousekeepingOrInternal(t) &&
               t.client_id === selectedClientId &&
               (selectedCategoryFilter === 'ALL' ||
                 (t.category || 'Fulfilment') === selectedCategoryFilter)
@@ -496,12 +504,9 @@ export function NowClient({
   // Dedicated Cloud9 Internal / Housekeeping tasks (Item #10)
   const housekeepingTasks = useMemo(
     () =>
-      taskTypes.filter(
-        (t) =>
-          (t.category || '').toLowerCase().includes('housekeeping') ||
-          t.code === 'STD-CLEAN' ||
-          t.billing_status === 'our_cost'
-      ),
+      taskTypes
+        .filter((t) => isHousekeepingOrInternal(t))
+        .sort((a, b) => (a.sort_order ?? 99) - (b.sort_order ?? 99)),
     [taskTypes]
   );
 
@@ -548,12 +553,22 @@ export function NowClient({
 
   const standardTasks = useMemo(
     () =>
-      taskTypes.filter(
-        (t) =>
-          Boolean(t.is_standard) &&
-          (selectedCategoryFilter === 'ALL' ||
-            (t.category || 'Fulfilment') === selectedCategoryFilter)
-      ),
+      taskTypes
+        .filter(
+          (t) =>
+            Boolean(t.is_standard) &&
+            !isHousekeepingOrInternal(t) &&
+            !['STD-GIN-CONT', 'STD-GIN-PAL', 'STD-GIN-BOX'].includes(t.code) &&
+            (selectedCategoryFilter === 'ALL' ||
+              (t.category || 'Fulfilment') === selectedCategoryFilter)
+        )
+        .sort((a, b) => {
+          if (a.code === 'STD-PICK') return -1;
+          if (b.code === 'STD-PICK') return 1;
+          if (a.code === 'STD-PACK') return -1;
+          if (b.code === 'STD-PACK') return 1;
+          return (a.sort_order ?? 50) - (b.sort_order ?? 50);
+        }),
     [taskTypes, selectedCategoryFilter]
   );
 
@@ -2712,93 +2727,187 @@ export function NowClient({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              {standardTasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="p-4 rounded-2xl bg-[#0B1A2C] hover:bg-[#0E223A] border border-sky-500/25 border-l-[4px] border-l-[#38BDF8] card-interactive flex items-center justify-between gap-3 transition shadow"
-                >
-                  <button
-                    type="button"
-                    onClick={() => executeStartTask(task, 'picked', selectedClient)}
-                    className="flex-1 text-left min-w-0"
-                  >
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="px-2 py-0.5 rounded bg-[#38BDF8] text-slate-950 font-mono text-[10px] font-black">
-                        STANDARD 3PL SOP
-                      </span>
-                      <span className="text-[12px] font-normal text-slate-400">
-                        {task.category || 'Fulfilment'}
-                      </span>
-                    </div>
-                    <div className="text-[15px] font-semibold text-[#E8E8E8] mt-1.5 leading-snug">
-                      {task.name}
-                    </div>
-                    <div className="text-[11px] font-normal text-slate-400 mt-1 flex flex-wrap items-center gap-1.5">
-                      <span className="text-slate-400">
-                        Target: <strong className="text-sky-300 font-medium">{isMultiClientSelected ? 'Multi-Client Wave' : selectedClient?.name}</strong>
-                      </span>
-                      {(isManagerOrAdmin || settings.show_targets_to_operatives) && task.standard_minutes ? (
-                        <span className="px-2 py-0.5 rounded bg-sky-950/80 border border-sky-500/40 text-[10px] font-mono font-bold text-sky-300">
-                          ⚡ {Number(task.standard_minutes).toFixed(2)} min/{task.unit_label || 'unit'} std
-                        </span>
-                      ) : null}
-                      {task.unit_label && (
-                        <span className="px-2 py-0.5 rounded bg-teal-950/80 border border-teal-500/30 text-[11px] font-semibold text-[#2DD4BF]">
-                          Tracks {task.unit_label}
-                        </span>
-                      )}
-                    </div>
-                  </button>
+              {standardTasks.map((task) => {
+                const isGoodsInMaster =
+                  task.code === 'STD-GOODSIN' ||
+                  task.name.toLowerCase().startsWith('goods-in');
+                const ginContTask =
+                  taskTypes.find((t) => t.code === 'STD-GIN-CONT') || task;
+                const ginPalTask =
+                  taskTypes.find((t) => t.code === 'STD-GIN-PAL') || task;
+                const ginBoxTask =
+                  taskTypes.find((t) => t.code === 'STD-GIN-BOX') || task;
 
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => toggleFavouriteTask(selectedClient?.id ?? null, task.id)}
-                      className={`p-2.5 rounded-xl border transition ${
-                        favouriteKeys.includes(`${selectedClient?.id || 'STD'}:${task.id}`)
-                          ? 'bg-amber-500/20 border-amber-400 text-amber-300'
-                          : 'bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-300 border-slate-800'
-                      }`}
-                      title="Star as Weekly Favourite"
-                    >
-                      <Star
-                        className={`w-4 h-4 ${
-                          favouriteKeys.includes(`${selectedClient?.id || 'STD'}:${task.id}`)
-                            ? 'fill-current'
-                            : ''
-                        }`}
-                      />
-                    </button>
-                    {isManagerOrAdmin && (
+                return (
+                  <div
+                    key={task.id}
+                    className={`p-4 rounded-2xl bg-[#0B1A2C] hover:bg-[#0E223A] border border-l-[4px] card-interactive flex flex-col justify-between gap-3 transition shadow ${
+                      task.code === 'STD-PICK'
+                        ? 'border-emerald-400/50 border-l-emerald-400 ring-1 ring-emerald-500/30'
+                        : 'border-sky-500/25 border-l-[#38BDF8]'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
                       <button
                         type="button"
-                        onClick={() => setTaskEditModal(task)}
-                        className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition"
-                        title="Edit standard task"
+                        onClick={() =>
+                          executeStartTask(
+                            isGoodsInMaster ? ginPalTask : task,
+                            'picked',
+                            selectedClient
+                          )
+                        }
+                        className="flex-1 text-left min-w-0"
                       >
-                        <Pencil className="w-4 h-4" />
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {task.code === 'STD-PICK' && (
+                            <span className="px-2 py-0.5 rounded bg-emerald-400 text-slate-950 font-mono text-[10px] font-black">
+                              DEFAULT #1 TASK
+                            </span>
+                          )}
+                          <span className="px-2 py-0.5 rounded bg-[#38BDF8] text-slate-950 font-mono text-[10px] font-black">
+                            STANDARD 3PL SOP
+                          </span>
+                          <span className="text-[12px] font-normal text-slate-400">
+                            {task.category || 'Fulfilment'}
+                          </span>
+                        </div>
+                        <div className="text-[15px] font-semibold text-[#E8E8E8] mt-1.5 leading-snug">
+                          {task.name}
+                        </div>
+                        <div className="text-[11px] font-normal text-slate-400 mt-1 flex flex-wrap items-center gap-1.5">
+                          <span className="text-slate-400">
+                            Target:{' '}
+                            <strong className="text-sky-300 font-medium">
+                              {isMultiClientSelected
+                                ? 'Multi-Client Wave'
+                                : selectedClient?.name}
+                            </strong>
+                          </span>
+                          {(isManagerOrAdmin || settings.show_targets_to_operatives) &&
+                          task.standard_minutes ? (
+                            <span className="px-2 py-0.5 rounded bg-sky-950/80 border border-sky-500/40 text-[10px] font-mono font-bold text-sky-300">
+                              ⚡ {Number(task.standard_minutes).toFixed(2)} min/
+                              {task.unit_label || 'unit'} std
+                            </span>
+                          ) : null}
+                          {task.unit_label && (
+                            <span className="px-2 py-0.5 rounded bg-teal-950/80 border border-teal-500/30 text-[11px] font-semibold text-[#2DD4BF]">
+                              {isGoodsInMaster
+                                ? 'Select Containers, Pallets, or Boxes below'
+                                : `Tracks ${task.unit_label}`}
+                            </span>
+                          )}
+                        </div>
                       </button>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            toggleFavouriteTask(selectedClient?.id ?? null, task.id)
+                          }
+                          className={`p-2.5 rounded-xl border transition ${
+                            favouriteKeys.includes(
+                              `${selectedClient?.id || 'STD'}:${task.id}`
+                            )
+                              ? 'bg-amber-500/20 border-amber-400 text-amber-300'
+                              : 'bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-300 border-slate-800'
+                          }`}
+                          title="Star as Weekly Favourite"
+                        >
+                          <Star
+                            className={`w-4 h-4 ${
+                              favouriteKeys.includes(
+                                `${selectedClient?.id || 'STD'}:${task.id}`
+                              )
+                                ? 'fill-current'
+                                : ''
+                            }`}
+                          />
+                        </button>
+                        {isManagerOrAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => setTaskEditModal(task)}
+                            className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition"
+                            title="Edit standard task"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openConfirmStart(
+                              isGoodsInMaster ? ginPalTask : task,
+                              'picked',
+                              selectedClient
+                            )
+                          }
+                          className="h-10 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[11px] font-bold flex items-center gap-1 transition"
+                          title="Start with an Order / Batch Reference"
+                        >
+                          <Hash className="w-3 h-3 text-[#38BDF8]" />
+                          Ref
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            executeStartTask(
+                              isGoodsInMaster ? ginPalTask : task,
+                              'picked',
+                              selectedClient
+                            )
+                          }
+                          className="play-btn w-11 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center shadow-md shadow-emerald-500/15 transition"
+                          title="Start standard warehouse task immediately"
+                        >
+                          <Play className="w-5 h-5 fill-current" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* GOODS-IN SUB-SELECTOR: CONTAINERS | PALLETS | BOXES */}
+                    {isGoodsInMaster && (
+                      <div className="pt-2.5 border-t border-sky-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-sky-300">
+                          Choose Goods-In Type:
+                        </span>
+                        <div className="grid grid-cols-3 gap-1.5 flex-1">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              executeStartTask(ginContTask, 'picked', selectedClient)
+                            }
+                            className="px-2.5 py-2 rounded-xl bg-slate-950 hover:bg-sky-500 hover:text-slate-950 text-sky-200 border border-sky-500/40 text-xs font-black flex items-center justify-center gap-1 transition"
+                          >
+                            📦 Containers
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              executeStartTask(ginPalTask, 'picked', selectedClient)
+                            }
+                            className="px-2.5 py-2 rounded-xl bg-slate-950 hover:bg-sky-500 hover:text-slate-950 text-sky-200 border border-sky-500/40 text-xs font-black flex items-center justify-center gap-1 transition"
+                          >
+                            🪵 Pallets
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              executeStartTask(ginBoxTask, 'picked', selectedClient)
+                            }
+                            className="px-2.5 py-2 rounded-xl bg-slate-950 hover:bg-sky-500 hover:text-slate-950 text-sky-200 border border-sky-500/40 text-xs font-black flex items-center justify-center gap-1 transition"
+                          >
+                            📫 Boxes
+                          </button>
+                        </div>
+                      </div>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => openConfirmStart(task, 'picked', selectedClient)}
-                      className="h-10 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[11px] font-bold flex items-center gap-1 transition"
-                      title="Start with an Order / Batch Reference"
-                    >
-                      <Hash className="w-3 h-3 text-[#38BDF8]" />
-                      Ref
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => executeStartTask(task, 'picked', selectedClient)}
-                      className="play-btn w-11 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center shadow-md shadow-emerald-500/15 transition"
-                      title="Start standard warehouse task immediately"
-                    >
-                      <Play className="w-5 h-5 fill-current" />
-                    </button>
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {/* Add Task + Tile for Standard Warehouse Tasks (Supervisors & Admins Only) */}
               {isManagerOrAdmin && (

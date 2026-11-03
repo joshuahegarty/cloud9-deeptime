@@ -12,7 +12,7 @@ const txStorage = new AsyncLocalStorage<DbTx>();
 
 const globalForDb = globalThis as unknown as {
   __deeptimePgPromise?: Promise<PGlite>;
-  __deeptimeMigratedV9?: boolean;
+  __deeptimeMigratedV10?: boolean;
   __deeptimeMutex?: Promise<unknown>;
   __deeptimeRealtimeVersion?: number;
 };
@@ -152,7 +152,7 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
       true,
       24.00,
       'BC-STD-PICK',
-      10,
+      1,
       true
     ),
     (
@@ -168,7 +168,7 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
       true,
       24.00,
       'BC-STD-PACK',
-      10,
+      2,
       true
     ),
     (
@@ -176,7 +176,7 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
       null,
       true,
       'Inbound / Goods-In',
-      'Goods-In Container / Pallet Receiving',
+      'Goods-In (Containers / Pallets / Boxes)',
       'STD-GOODSIN',
       10.00,
       'pallets',
@@ -184,7 +184,71 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
       true,
       25.00,
       'BC-STD-GIN',
-      11,
+      3,
+      true
+    ),
+    (
+      '20000000-0000-0000-0000-000000000108',
+      null,
+      true,
+      'Inbound / Goods-In',
+      'Goods-In: Container Unload (De-Vanning)',
+      'STD-GIN-CONT',
+      90.00,
+      'containers',
+      true,
+      true,
+      26.00,
+      'BC-STD-GIN-CONT',
+      4,
+      true
+    ),
+    (
+      '20000000-0000-0000-0000-000000000109',
+      null,
+      true,
+      'Inbound / Goods-In',
+      'Goods-In: Pallet Receiving & Check-In',
+      'STD-GIN-PAL',
+      10.00,
+      'pallets',
+      true,
+      true,
+      25.00,
+      'BC-STD-GIN-PAL',
+      5,
+      true
+    ),
+    (
+      '20000000-0000-0000-0000-000000000110',
+      null,
+      true,
+      'Inbound / Goods-In',
+      'Goods-In: Boxes & Carton Receiving',
+      'STD-GIN-BOX',
+      1.50,
+      'boxes',
+      true,
+      true,
+      24.50,
+      'BC-STD-GIN-BOX',
+      6,
+      true
+    ),
+    (
+      '20000000-0000-0000-0000-000000000112',
+      null,
+      true,
+      'Inbound / Goods-In',
+      'Inbound Putaway to Racking / Pick Face',
+      'STD-PUTAWAY',
+      6.00,
+      'pallets',
+      true,
+      true,
+      24.50,
+      'BC-STD-PUT',
+      7,
       true
     ),
     (
@@ -200,7 +264,23 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
       true,
       24.00,
       'BC-STD-DISP',
-      12,
+      8,
+      true
+    ),
+    (
+      '20000000-0000-0000-0000-000000000111',
+      null,
+      true,
+      'Outbound / Dispatch',
+      'Pallet Build & Wrap',
+      'STD-PALLET-BW',
+      8.00,
+      'pallets',
+      true,
+      true,
+      25.00,
+      'BC-STD-PALBW',
+      9,
       true
     ),
     (
@@ -216,7 +296,7 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
       true,
       24.50,
       'BC-STD-RWK',
-      13,
+      10,
       true
     ),
     (
@@ -226,21 +306,109 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
       'Inventory',
       'Stock Take & Cycle Count',
       'STD-STOCK',
-      null,
+      0.50,
       'locations',
       true,
       true,
       23.00,
       'BC-STD-STK',
+      11,
+      true
+    ),
+    (
+      '20000000-0000-0000-0000-000000000113',
+      null,
+      true,
+      'Pick & Pack',
+      'B2B / Wholesale Case & Master Carton Pick',
+      'STD-B2B-PICK',
+      1.20,
+      'cartons',
+      true,
+      true,
+      25.00,
+      'BC-STD-B2B',
+      12,
+      true
+    ),
+    (
+      '20000000-0000-0000-0000-000000000114',
+      null,
+      true,
+      'Kitting & Value Add',
+      'Kitting, Bundling & Multi-Pack Assembly',
+      'STD-KITTING',
+      2.00,
+      'kits',
+      true,
+      true,
+      25.50,
+      'BC-STD-KIT',
+      13,
+      true
+    ),
+    (
+      '20000000-0000-0000-0000-000000000115',
+      null,
+      true,
+      'Returns',
+      'Customer Returns Processing & Grading (RMA)',
+      'STD-RETURNS',
+      3.00,
+      'returns',
+      true,
+      true,
+      24.50,
+      'BC-STD-RET',
       14,
+      true
+    ),
+    (
+      '20000000-0000-0000-0000-000000000116',
+      null,
+      true,
+      'Inventory',
+      'Quality Control (QC) & Batch Inspection',
+      'STD-QC',
+      2.00,
+      'cartons',
+      true,
+      true,
+      24.50,
+      'BC-STD-QC',
+      15,
+      true
+    ),
+    (
+      '20000000-0000-0000-0000-000000000117',
+      null,
+      true,
+      'Outbound / Dispatch',
+      'Container / Wagon Loading & Carrier Handover',
+      'STD-LOAD',
+      4.00,
+      'pallets',
+      true,
+      true,
+      25.00,
+      'BC-STD-LOAD',
+      16,
       true
     )
   on conflict (id) do nothing;
 
-  -- Upgrade existing STD-PICK row from "Standard Order Pick & Pack" -> "Standard Order Pick" and set require_units_on_close = false
+  -- Ensure Standard Order Pick is the #1 default task and never says "Pick & Pack"
   update task_types
-  set name = 'Standard Order Pick', require_units_on_close = false
-  where id = '20000000-0000-0000-0000-000000000101' and name = 'Standard Order Pick & Pack';
+  set name = 'Standard Order Pick', require_units_on_close = false, sort_order = 1
+  where id = '20000000-0000-0000-0000-000000000101';
+
+  update task_types
+  set name = 'Standard Order Pack', require_units_on_close = false, sort_order = 2
+  where id = '20000000-0000-0000-0000-000000000106';
+
+  update task_types
+  set name = 'Goods-In (Containers / Pallets / Boxes)', sort_order = 3
+  where id = '20000000-0000-0000-0000-000000000102';
 
   update task_types
   set require_units_on_close = false
@@ -360,6 +528,25 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
       true
     ),
     (
+      '20000000-0000-0000-0000-000000000301',
+      null,
+      true,
+      'Housekeeping',
+      null,
+      null,
+      'Replenishment (Pick-Face & Forward Locations)',
+      'INT-REPLEN',
+      null,
+      'locations',
+      false,
+      false,
+      'our_cost',
+      0.00,
+      'BC-INT-REPLEN',
+      20,
+      true
+    ),
+    (
       '20000000-0000-0000-0000-000000000107',
       null,
       true,
@@ -375,7 +562,102 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
       'our_cost',
       0.00,
       'BC-STD-CLEAN',
-      20,
+      21,
+      true
+    ),
+    (
+      '20000000-0000-0000-0000-000000000302',
+      null,
+      true,
+      'Housekeeping',
+      null,
+      null,
+      'Cardboard Clean-Out & Baler Crushing',
+      'INT-CARDBOARD',
+      null,
+      'bales',
+      false,
+      false,
+      'our_cost',
+      0.00,
+      'BC-INT-CARDBOARD',
+      22,
+      true
+    ),
+    (
+      '20000000-0000-0000-0000-000000000303',
+      null,
+      true,
+      'Housekeeping',
+      null,
+      null,
+      'Packing Bench Consumables Restock (Boxes, Tape, Void Fill)',
+      'INT-CONSUMABLES',
+      null,
+      'benches',
+      false,
+      false,
+      'our_cost',
+      0.00,
+      'BC-INT-CONSUM',
+      23,
+      true
+    ),
+    (
+      '20000000-0000-0000-0000-000000000304',
+      null,
+      true,
+      'Housekeeping',
+      null,
+      null,
+      'Empty Pallet Sorting & Loading Bay Clear-Down',
+      'INT-PALLETS',
+      null,
+      'pallets',
+      false,
+      false,
+      'our_cost',
+      0.00,
+      'BC-INT-PALLETS',
+      24,
+      true
+    ),
+    (
+      '20000000-0000-0000-0000-000000000305',
+      null,
+      true,
+      'Housekeeping',
+      null,
+      null,
+      'Forklift / MHE Daily Safety Check & Battery Swap',
+      'INT-MHE',
+      null,
+      'checks',
+      false,
+      false,
+      'our_cost',
+      0.00,
+      'BC-INT-MHE',
+      25,
+      true
+    ),
+    (
+      '20000000-0000-0000-0000-000000000306',
+      null,
+      true,
+      'Housekeeping',
+      null,
+      null,
+      'Team Briefing, Shift Handover & Training',
+      'INT-BRIEFING',
+      null,
+      'sessions',
+      false,
+      false,
+      'our_cost',
+      0.00,
+      'BC-INT-BRIEF',
+      26,
       true
     )
   on conflict (id) do nothing;
@@ -450,13 +732,13 @@ export async function getDb(): Promise<PGlite> {
       const pg = new PGlite(dataDir);
       await pg.waitReady;
       await applySchemaAndSeed(pg, true, true);
-      globalForDb.__deeptimeMigratedV9 = true;
+      globalForDb.__deeptimeMigratedV10 = true;
       return pg;
     })();
-  } else if (!globalForDb.__deeptimeMigratedV9) {
+  } else if (!globalForDb.__deeptimeMigratedV10) {
     const pg = await globalForDb.__deeptimePgPromise;
     await pg.exec(UPGRADE_AND_STANDARD_TASKS_SQL);
-    globalForDb.__deeptimeMigratedV9 = true;
+    globalForDb.__deeptimeMigratedV10 = true;
   }
   return globalForDb.__deeptimePgPromise;
 }
