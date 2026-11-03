@@ -29,6 +29,7 @@ export default async function NowPage() {
       initialRunningEntry={nowData.runningEntry}
       initialTodayEntries={nowData.todayEntries}
       last5Tasks={nowData.last5Tasks}
+      assignedTasks={nowData.assignedTasks}
       openAttendance={nowData.openAttendance}
       clients={clients}
       taskTypes={taskTypes}

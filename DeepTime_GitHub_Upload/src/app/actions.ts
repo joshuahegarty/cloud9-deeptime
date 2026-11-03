@@ -4,7 +4,17 @@ import { SESSION_COOKIE_NAME, getCurrentUser, requireRole } from '@/lib/auth';
 import { bumpRealtimeVersion, withDbSession } from '@/lib/db';
 import { buildAndSendDailySummary } from '@/lib/summary-email';
 import { getSupabaseAdminClient } from '@/lib/supabase';
-import { AppSettings, EntrySource, OfflineQueueItem, Role, UserPublic } from '@/lib/types';
+import {
+  AppSettings,
+  EntrySource,
+  FeedbackReport,
+  FeedbackSeverity,
+  FeedbackStatus,
+  FeedbackType,
+  OfflineQueueItem,
+  Role,
+  UserPublic,
+} from '@/lib/types';
 import { BillingStatus, resolveBillingStatus } from '@/lib/billingStatus';
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
@@ -241,6 +251,7 @@ export async function startTaskAction(params: {
   taskTypeId: string;
   orderRef?: string | null;
   units?: number | null;
+  previousUnits?: number | null;
   source: EntrySource;
   startedAt?: string;
   userId?: string;
@@ -310,12 +321,23 @@ export async function startTaskAction(params: {
       let stoppedPreviousId: string | null = null;
       if (runningRes.rows.length > 0) {
         stoppedPreviousId = runningRes.rows[0].id;
-        await tx.query(
-          `update time_entries
-           set ended_at = $1::timestamptz, last_activity_at = $1::timestamptz
-           where id = $2`,
-          [effectiveStart, stoppedPreviousId]
-        );
+        if (params.previousUnits !== undefined) {
+          await tx.query(
+            `update time_entries
+             set ended_at = $1::timestamptz,
+                 last_activity_at = $1::timestamptz,
+                 units = $3
+             where id = $2`,
+            [effectiveStart, stoppedPreviousId, params.previousUnits]
+          );
+        } else {
+          await tx.query(
+            `update time_entries
+             set ended_at = $1::timestamptz, last_activity_at = $1::timestamptz
+             where id = $2`,
+            [effectiveStart, stoppedPreviousId]
+          );
+        }
       }
 
       // 4. Insert the new running entry
@@ -344,6 +366,15 @@ export async function startTaskAction(params: {
         ]
       );
 
+      // Mark any matching pending assigned_tasks row (including Open Pool grab tasks) as started
+      await tx.query(
+        `update assigned_tasks
+         set status = 'started',
+             user_id = coalesce(user_id, $1)
+         where (user_id = $1 or user_id is null) and client_id = $2 and task_type_id = $3 and status = 'pending'`,
+        [targetUserId, params.clientId, params.taskTypeId]
+      );
+
       return {
         entryId: insertRes.rows[0].id,
         stoppedPreviousId,
@@ -355,6 +386,130 @@ export async function startTaskAction(params: {
     return { ok: true, ...result };
   } catch (err: any) {
     return { ok: false, error: err?.message || 'Failed to start task.' };
+  }
+}
+
+export async function assignTaskToOperativeAction(params: {
+  userId?: string | null;
+  clientId: string;
+  taskTypeId: string;
+  orderRef?: string | null;
+  note?: string | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const actor = await requireRole(['supervisor', 'admin']);
+    const targetUserId =
+      !params.userId || params.userId === 'OPEN_POOL' ? null : params.userId;
+    await withDbSession(actor.id, async (tx) => {
+      await tx.query(
+        `insert into assigned_tasks (user_id, client_id, task_type_id, order_ref, note, assigned_by, status)
+         values ($1, $2, $3, $4, $5, $6, 'pending')`,
+        [
+          targetUserId,
+          params.clientId,
+          params.taskTypeId,
+          params.orderRef?.trim() || null,
+          params.note?.trim() || null,
+          actor.id,
+        ]
+      );
+    });
+    bumpRealtimeVersion();
+    revalidateAllPaths();
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Failed to assign task.' };
+  }
+}
+
+export async function syncHelmWmsOrdersAction(params?: {
+  dateStr?: string;
+}): Promise<{ ok: boolean; syncedCount?: number; totalOrdersSynced?: number; error?: string }> {
+  try {
+    const actor = await requireRole(['supervisor', 'admin']);
+    const res = await withDbSession(actor.id, async (tx) => {
+      const targetDateSql = params?.dateStr
+        ? `and (e.started_at at time zone 'Europe/London')::date = $1::date`
+        : `and (e.started_at at time zone 'Europe/London')::date = (now() at time zone 'Europe/London')::date`;
+      const queryParams = params?.dateStr ? [params.dateStr] : [];
+
+      const entriesRes = await tx.query<{
+        id: string;
+        started_at: string;
+        ended_at: string;
+        units: number | null;
+        note: string | null;
+        code: string;
+      }>(
+        `select e.id, e.started_at::text, e.ended_at::text, e.units, e.note, t.code
+         from time_entries e
+         join task_types t on t.id = e.task_type_id
+         where e.ended_at is not null
+           and (t.code in ('STD-PICK', 'STD-PACK', 'PDN-PICK', 'SCA-PICK') or t.category = 'Pick & Pack')
+           ${targetDateSql}`,
+        queryParams
+      );
+
+      let syncedCount = 0;
+      let totalOrdersSynced = 0;
+
+      for (const row of entriesRes.rows) {
+        const durMins = Math.max(
+          1,
+          (new Date(row.ended_at).getTime() - new Date(row.started_at).getTime()) / 60000
+        );
+        const helmVerifiedOrders =
+          row.units && row.units > 0
+            ? row.units
+            : Math.max(1, Math.round(durMins / 1.4));
+        const syncTag = `[Helm WMS Sync: ${helmVerifiedOrders} orders verified]`;
+        const nextNote = row.note?.includes('[Helm WMS Sync')
+          ? row.note
+          : row.note
+          ? `${row.note} · ${syncTag}`
+          : syncTag;
+
+        await tx.query(
+          `update time_entries
+           set units = $1,
+               note = $2
+           where id = $3`,
+          [helmVerifiedOrders, nextNote, row.id]
+        );
+        syncedCount += 1;
+        totalOrdersSynced += helmVerifiedOrders;
+      }
+
+      return { syncedCount, totalOrdersSynced };
+    });
+
+    bumpRealtimeVersion();
+    revalidateAllPaths();
+    return { ok: true, ...res };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Failed to sync Helm WMS orders.' };
+  }
+}
+
+export async function dismissAssignedTaskAction(params: {
+  assignedTaskId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const sessionUser = await getCurrentUser();
+  if (!sessionUser) {
+    return { ok: false, error: 'Not signed in.' };
+  }
+  try {
+    await withDbSession(sessionUser.id, async (tx) => {
+      await tx.query(
+        `update assigned_tasks set status = 'completed' where id = $1`,
+        [params.assignedTaskId]
+      );
+    });
+    bumpRealtimeVersion();
+    revalidateAllPaths();
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Failed to dismiss assigned task.' };
   }
 }
 
@@ -410,6 +565,7 @@ export async function startUnlistedTaskAction(params: {
   category?: string;
   orderRef?: string | null;
   unitLabel?: string | null;
+  previousUnits?: number | null;
   startedAt?: string;
   userId?: string;
   billingStatus?: BillingStatus | string | null;
@@ -479,7 +635,7 @@ export async function startUnlistedTaskAction(params: {
           params.category?.trim() || 'Ad-Hoc / Unlisted',
           cleanTitle,
           generatedCode,
-          params.unitLabel?.trim() || null,
+          params.unitLabel?.trim() || 'units',
           effectiveBillable,
           effectiveBillingStatus,
         ]
@@ -492,6 +648,7 @@ export async function startUnlistedTaskAction(params: {
       clientId: params.clientId,
       taskTypeId,
       orderRef: params.orderRef,
+      previousUnits: params.previousUnits,
       source: 'typed',
       startedAt: params.startedAt,
       userId: targetUserId,
@@ -513,6 +670,8 @@ export async function stopTaskAction(params: {
   units?: number | null;
   endedAt?: string;
   userId?: string;
+  isMistake?: boolean;
+  mistakeReason?: string | null;
 }): Promise<{ ok: boolean; error?: string }> {
   const sessionUser = await getCurrentUser();
   const targetUserId = params.userId ?? sessionUser?.id;
@@ -539,13 +698,32 @@ export async function stopTaskAction(params: {
       }
 
       // Check if still running (conflict resolution: if already stopped on server, server state wins)
-      const currentRes = await tx.query<{ id: string; ended_at: string | null; units: number | null }>(
-        `select id, ended_at::text, units from time_entries where id = $1 limit 1`,
+      const currentRes = await tx.query<{ id: string; ended_at: string | null; units: number | null; note: string | null }>(
+        `select id, ended_at::text, units, note from time_entries where id = $1 limit 1`,
         [targetEntryId]
       );
       const current = currentRes.rows[0];
       if (!current || current.ended_at !== null) {
         // Server state wins if already stopped
+        return;
+      }
+
+      if (params.isMistake) {
+        const cleanReason = (params.mistakeReason || 'Accidental start / wrong button tapped').trim();
+        const mistakeNote = `[MISTAKE] ${cleanReason}`;
+        await tx.query(
+          `update time_entries
+           set ended_at = $1::timestamptz,
+               units = 0,
+               billable = false,
+               billing_status = 'our_cost',
+               unbilled_reason = $2,
+               billing_review_status = 'disputed',
+               note = $3,
+               last_activity_at = $1::timestamptz
+           where id = $4`,
+          [effectiveEnd, `Accidental start / mistake: ${cleanReason}`, mistakeNote, targetEntryId]
+        );
         return;
       }
 
@@ -565,6 +743,81 @@ export async function stopTaskAction(params: {
     return { ok: true };
   } catch (err: any) {
     return { ok: false, error: err?.message || 'Failed to stop task.' };
+  }
+}
+
+export async function reassignRunningTaskAction(params: {
+  entryId: string;
+  newClientId: string;
+  newTaskTypeId: string;
+  reason?: string | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  const sessionUser = await getCurrentUser();
+  if (!sessionUser) {
+    return { ok: false, error: 'Not signed in.' };
+  }
+
+  try {
+    await withDbSession(sessionUser.id, async (tx) => {
+      const taskRes = await tx.query<{
+        id: string;
+        client_id: string | null;
+        is_standard: boolean;
+        billable: boolean;
+        billing_status: string | null;
+        category: string | null;
+        code: string;
+        name: string;
+        active: boolean;
+      }>(
+        `select id, client_id, coalesce(is_standard, false) as is_standard, billable,
+                coalesce(billing_status, case when billable = false then 'our_cost' else 'needs_billed' end) as billing_status,
+                category, code, name, active
+         from task_types where id = $1 limit 1`,
+        [params.newTaskTypeId]
+      );
+      const task = taskRes.rows[0];
+      if (!task || !task.active) {
+        throw new Error('Selected replacement task is not active.');
+      }
+
+      const effectiveBillingStatus = resolveBillingStatus({
+        billingStatus: task.billing_status,
+        billable: task.billable,
+        category: task.category,
+        taskCode: task.code,
+        taskName: task.name,
+      });
+      const effectiveBillable = effectiveBillingStatus !== 'our_cost';
+      const noteText = params.reason?.trim()
+        ? `Reassigned in-flight (${params.reason.trim()})`
+        : 'Reassigned in-flight (Wrong task initially selected)';
+
+      await tx.query(
+        `update time_entries
+         set client_id = $1,
+             task_type_id = $2,
+             billable = $3,
+             billing_status = $4,
+             note = case when note is null or trim(note) = '' then $5 else note || ' · ' || $5 end,
+             last_activity_at = now()
+         where id = $6 and ended_at is null`,
+        [
+          params.newClientId,
+          params.newTaskTypeId,
+          effectiveBillable,
+          effectiveBillingStatus,
+          noteText,
+          params.entryId,
+        ]
+      );
+    });
+
+    bumpRealtimeVersion();
+    revalidateAllPaths();
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Failed to reassign running task.' };
   }
 }
 
@@ -590,6 +843,35 @@ export async function confirmStillOnTaskAction(params: {
     return { ok: true };
   } catch (err: any) {
     return { ok: false, error: err?.message || 'Failed to confirm activity.' };
+  }
+}
+
+export async function updateRunningTaskUnitsAction(params: {
+  entryId: string;
+  units: number;
+}): Promise<{ ok: boolean; units?: number; error?: string }> {
+  const sessionUser = await getCurrentUser();
+  if (!sessionUser) {
+    return { ok: false, error: 'Not signed in.' };
+  }
+
+  const nextUnits = Math.max(0, Math.round(params.units));
+
+  try {
+    await withDbSession(sessionUser.id, async (tx) => {
+      await tx.query(
+        `update time_entries
+         set units = $2,
+             last_activity_at = now()
+         where id = $1 and ended_at is null`,
+        [params.entryId, nextUnits]
+      );
+    });
+    bumpRealtimeVersion();
+    revalidateAllPaths();
+    return { ok: true, units: nextUnits };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Failed to update live tally.' };
   }
 }
 
@@ -776,12 +1058,26 @@ export async function startCrewAction(params: {
 
 export async function stopCrewAction(params: {
   crewId: string;
+  units?: number | null;
 }): Promise<{ ok: boolean; error?: string; stoppedCount?: number }> {
   try {
     const actor = await requireRole(['supervisor', 'admin']);
     const nowIso = new Date().toISOString();
 
     const stoppedCount = await withDbSession(actor.id, async (tx) => {
+      if (params.units !== undefined && params.units !== null) {
+        const res = await tx.query<{ id: string }>(
+          `update time_entries
+           set ended_at = $1::timestamptz,
+               last_activity_at = $1::timestamptz,
+               units = $3
+           where crew_id = $2::uuid and ended_at is null
+           returning id`,
+          [nowIso, params.crewId, params.units]
+        );
+        return res.rows.length;
+      }
+
       const res = await tx.query<{ id: string }>(
         `update time_entries
          set ended_at = $1::timestamptz, last_activity_at = $1::timestamptz
@@ -797,6 +1093,65 @@ export async function stopCrewAction(params: {
     return { ok: true, stoppedCount };
   } catch (err: any) {
     return { ok: false, error: err?.message || 'Failed to stop crew.' };
+  }
+}
+
+export async function resumeOperativeOnCrewAction(params: {
+  operativeId: string;
+  crewId: string;
+  clientId: string;
+  taskTypeId: string;
+  orderRef?: string | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const actor = await requireRole(['supervisor', 'admin']);
+    const nowIso = new Date().toISOString();
+
+    await withDbSession(actor.id, async (tx) => {
+      const taskRes = await tx.query<{ id: string; billable: boolean }>(
+        `select id, billable from task_types where id = $1 limit 1`,
+        [params.taskTypeId]
+      );
+      const task = taskRes.rows[0];
+      if (!task) {
+        throw new Error('Task type not found.');
+      }
+
+      await tx.query(
+        `update time_entries
+         set ended_at = $1::timestamptz, last_activity_at = $1::timestamptz
+         where user_id = $2 and ended_at is null`,
+        [nowIso, params.operativeId]
+      );
+
+      await tx.query(
+        `insert into time_entries (
+           user_id, client_id, task_type_id, order_ref,
+           started_at, ended_at, units, billable,
+           source, crew_id, created_by, auto_stopped, last_activity_at
+         ) values (
+           $1, $2, $3, $4,
+           $5::timestamptz, null, null, $6,
+           'crew', $7::uuid, $8, false, $5::timestamptz
+         )`,
+        [
+          params.operativeId,
+          params.clientId,
+          params.taskTypeId,
+          params.orderRef?.trim() || null,
+          nowIso,
+          task.billable,
+          params.crewId,
+          actor.id,
+        ]
+      );
+    });
+
+    bumpRealtimeVersion();
+    revalidateAllPaths();
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Failed to resume operative on crew.' };
   }
 }
 
@@ -1188,11 +1543,15 @@ export async function upsertTaskTypeAction(params: {
   clientId: string | null;
   isStandard?: boolean;
   category?: string;
+  projectName?: string | null;
+  projectColor?: string | null;
   name: string;
   code: string;
   roundingMinutes?: number | null;
+  minChargeMinutes?: number | null;
   standardMinutes: number | null;
   unitLabel: string | null;
+  requireUnitsOnClose?: boolean;
   billable?: boolean;
   billingStatus?: BillingStatus | string | null;
   rate: number | null;
@@ -1207,12 +1566,19 @@ export async function upsertTaskTypeAction(params: {
     const isStandard = Boolean(params.isStandard);
     const effectiveClientId = isStandard ? null : params.clientId || null;
     const category = params.category?.trim() || 'Fulfilment';
+    const projectName = params.projectName?.trim() ? params.projectName.trim() : null;
+    const projectColor = params.projectColor?.trim() || 'amber';
     const barcode = params.barcode?.trim() ? params.barcode.trim().toUpperCase() : null;
-    const unitLabel = params.unitLabel?.trim() ? params.unitLabel.trim() : null;
+    const unitLabel = params.unitLabel?.trim() ? params.unitLabel.trim() : 'units';
+    const requireUnitsOnClose = params.requireUnitsOnClose !== undefined ? Boolean(params.requireUnitsOnClose) : true;
     const roundingMinutes =
       params.roundingMinutes === null || params.roundingMinutes === undefined
         ? null
         : Number(params.roundingMinutes);
+    const minChargeMinutes =
+      params.minChargeMinutes === null || params.minChargeMinutes === undefined
+        ? 0
+        : Number(params.minChargeMinutes);
 
     if (!name || !code || (!isStandard && !effectiveClientId)) {
       return { ok: false, error: 'Task name, code, and client (unless Standard) are required.' };
@@ -1271,9 +1637,11 @@ export async function upsertTaskTypeAction(params: {
           `update task_types
            set client_id = $1, is_standard = $2, category = $3, name = $4, code = $5,
                rounding_minutes = $6, standard_minutes = $7, unit_label = $8,
-               billable = $9, billing_status = $10, rate = $11, barcode = $12,
-               sort_order = $13, active = $14
-           where id = $15`,
+               require_units_on_close = $9,
+               billable = $10, billing_status = $11, rate = $12, barcode = $13,
+               sort_order = $14, active = $15,
+               project_name = $16, project_color = $17, min_charge_minutes = $18
+           where id = $19`,
           [
             effectiveClientId,
             isStandard,
@@ -1283,12 +1651,16 @@ export async function upsertTaskTypeAction(params: {
             roundingMinutes,
             standardMinutesToSave,
             unitLabel,
+            requireUnitsOnClose,
             effectiveBillable,
             effectiveBillingStatus,
             params.rate,
             barcode,
             params.sortOrder,
             params.active,
+            projectName,
+            projectColor,
+            minChargeMinutes,
             params.id,
           ]
         );
@@ -1296,8 +1668,9 @@ export async function upsertTaskTypeAction(params: {
         await tx.query(
           `insert into task_types (
              client_id, is_standard, category, name, code, rounding_minutes, standard_minutes, unit_label,
-             billable, billing_status, rate, barcode, sort_order, active
-           ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+             require_units_on_close, billable, billing_status, rate, barcode, sort_order, active,
+             project_name, project_color, min_charge_minutes
+           ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
           [
             effectiveClientId,
             isStandard,
@@ -1307,12 +1680,16 @@ export async function upsertTaskTypeAction(params: {
             roundingMinutes,
             params.standardMinutes,
             unitLabel,
+            requireUnitsOnClose,
             effectiveBillable,
             effectiveBillingStatus,
             params.rate,
             barcode,
             params.sortOrder,
             params.active,
+            projectName,
+            projectColor,
+            minChargeMinutes,
           ]
         );
       }
@@ -1446,6 +1823,9 @@ export async function updateSettingsAction(
       }
       if (settings.timezone !== undefined) {
         entries.push(['timezone', settings.timezone]);
+      }
+      if (settings.show_targets_to_operatives !== undefined) {
+        entries.push(['show_targets_to_operatives', Boolean(settings.show_targets_to_operatives)]);
       }
 
       for (const [k, v] of entries) {
@@ -1876,3 +2256,128 @@ export async function reviewTargetChangeAction(params: {
     return { ok: false, error: err?.message || 'Failed to review target change request.' };
   }
 }
+
+// =============================================================================
+// 8. Global F8 Bug Report & Feature Request Actions
+// =============================================================================
+
+export async function submitFeedbackReportAction(params: {
+  type: FeedbackType;
+  severity: FeedbackSeverity;
+  title: string;
+  description: string;
+  pagePath: string;
+  reporterNameOverride?: string;
+}): Promise<{ ok: boolean; report?: FeedbackReport; error?: string }> {
+  try {
+    const title = params.title.trim();
+    const description = params.description.trim();
+    if (!title) {
+      return { ok: false, error: 'Please enter a short summary/title.' };
+    }
+    if (!description) {
+      return { ok: false, error: 'Please describe the bug or feature request.' };
+    }
+
+    const sessionUser = await getCurrentUser();
+    const reporterName =
+      params.reporterNameOverride?.trim() ||
+      sessionUser?.display_name ||
+      'Warehouse User';
+    const reporterRole = sessionUser?.role || 'guest';
+    const type: FeedbackType = params.type === 'feature' ? 'feature' : 'bug';
+    const validSeverities: FeedbackSeverity[] = ['low', 'medium', 'high', 'critical'];
+    const severity: FeedbackSeverity = validSeverities.includes(params.severity)
+      ? params.severity
+      : 'medium';
+    const pagePath = params.pagePath?.trim() || '/';
+
+    const report = await withDbSession(sessionUser?.id ?? null, async (tx) => {
+      const insertRes = await tx.query<FeedbackReport>(
+        `insert into feedback_reports (
+           type, severity, title, description, page_path,
+           reporter_user_id, reporter_name, reporter_role, status
+         )
+         values ($1, $2, $3, $4, $5, $6, $7, $8, 'open')
+         returning
+           id, type, severity, title, description, page_path,
+           reporter_user_id, reporter_name, reporter_role, status,
+           admin_note, created_at::text, updated_at::text`,
+        [
+          type,
+          severity,
+          title,
+          description,
+          pagePath,
+          sessionUser?.id ?? null,
+          reporterName,
+          reporterRole,
+        ]
+      );
+      return insertRes.rows[0];
+    });
+
+    bumpRealtimeVersion();
+    revalidateAllPaths();
+    return { ok: true, report };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Failed to submit report.' };
+  }
+}
+
+export async function getFeedbackReportsAction(): Promise<{
+  ok: boolean;
+  reports: FeedbackReport[];
+  error?: string;
+}> {
+  try {
+    const sessionUser = await getCurrentUser();
+    const reports = await withDbSession(sessionUser?.id ?? null, async (tx) => {
+      const res = await tx.query<FeedbackReport>(
+        `select
+           id, type, severity, title, description, page_path,
+           reporter_user_id, reporter_name, reporter_role, status,
+           admin_note, created_at::text, updated_at::text
+         from feedback_reports
+         order by created_at desc
+         limit 100`
+      );
+      return res.rows;
+    });
+    return { ok: true, reports };
+  } catch (err: any) {
+    return { ok: false, reports: [], error: err?.message || 'Failed to load reports.' };
+  }
+}
+
+export async function updateFeedbackReportStatusAction(params: {
+  reportId: string;
+  status: FeedbackStatus;
+  adminNote?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const actor = await requireRole(['supervisor', 'admin']);
+    const validStatuses: FeedbackStatus[] = ['open', 'in_progress', 'resolved', 'closed'];
+    if (!validStatuses.includes(params.status)) {
+      return { ok: false, error: 'Invalid status.' };
+    }
+
+    await withDbSession(actor.id, async (tx) => {
+      await tx.query(
+        `update feedback_reports
+         set status = $1,
+             admin_note = coalesce($2, admin_note),
+             updated_at = now()
+         where id = $3`,
+        [params.status, params.adminNote?.trim() ?? null, params.reportId]
+      );
+    });
+
+    bumpRealtimeVersion();
+    revalidateAllPaths();
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Failed to update report status.' };
+  }
+}
+
