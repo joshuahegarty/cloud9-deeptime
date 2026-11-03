@@ -12,7 +12,7 @@ const txStorage = new AsyncLocalStorage<DbTx>();
 
 const globalForDb = globalThis as unknown as {
   __deeptimePgPromise?: Promise<PGlite>;
-  __deeptimeMigratedV10?: boolean;
+  __deeptimeMigratedV11?: boolean;
   __deeptimeMutex?: Promise<unknown>;
   __deeptimeRealtimeVersion?: number;
 };
@@ -667,7 +667,86 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
   where id in ('20000000-0000-0000-0000-000000000202', '20000000-0000-0000-0000-000000000003')
     and project_name is null;
 
-  -- Seed initial Supervisor-Assigned tasks for Liam O'Connor so "Assigned to You" tab works out of the box
+  -- Cloud9 Team Roster, Role Tags (job_title), Team Tags (team_name), and Core Warehouse Team flag
+  alter table users add column if not exists job_title text;
+  alter table users add column if not exists team_name text;
+  alter table users add column if not exists is_core_warehouse boolean not null default false;
+
+  drop view if exists users_public;
+  create view users_public as
+    select
+      id,
+      display_name,
+      role,
+      job_title,
+      team_name,
+      coalesce(is_core_warehouse, false) as is_core_warehouse,
+      active,
+      created_at,
+      updated_at
+    from users;
+
+  -- Seed / Update Cloud9 Auth Users (17 Staff Members)
+  insert into auth.users (id, email, encrypted_password, raw_user_meta_data) values
+    ('00000000-0000-0000-0000-000000000001', 'pin-00000000-0000-0000-0000-000000000001@internal.local', '1111', '{"display_name":"Erica","role":"operative"}'::jsonb),
+    ('00000000-0000-0000-0000-000000000002', 'pin-00000000-0000-0000-0000-000000000002@internal.local', '2222', '{"display_name":"Sam","role":"operative"}'::jsonb),
+    ('00000000-0000-0000-0000-000000000003', 'pin-00000000-0000-0000-0000-000000000003@internal.local', '3333', '{"display_name":"Alex","role":"operative"}'::jsonb),
+    ('00000000-0000-0000-0000-000000000004', 'mark@cloud9fulfilment.co.uk', 'password123', '{"display_name":"Mark","role":"supervisor"}'::jsonb),
+    ('00000000-0000-0000-0000-000000000005', 'josh@cloud9fulfilment.co.uk', 'password123', '{"display_name":"Josh","role":"admin"}'::jsonb),
+    ('00000000-0000-0000-0000-000000000006', 'edna@cloud9fulfilment.co.uk', 'password123', '{"display_name":"Edna","role":"supervisor"}'::jsonb),
+    ('00000000-0000-0000-0000-000000000007', 'pin-00000000-0000-0000-0000-000000000007@internal.local', '1004', '{"display_name":"Mason","role":"operative"}'::jsonb),
+    ('00000000-0000-0000-0000-000000000008', 'pin-00000000-0000-0000-0000-000000000008@internal.local', '1005', '{"display_name":"Ben","role":"operative"}'::jsonb),
+    ('00000000-0000-0000-0000-000000000009', 'pin-00000000-0000-0000-0000-000000000009@internal.local', '1006', '{"display_name":"Jess","role":"operative"}'::jsonb),
+    ('00000000-0000-0000-0000-000000000010', 'pin-00000000-0000-0000-0000-000000000010@internal.local', '1007', '{"display_name":"Sabine","role":"operative"}'::jsonb),
+    ('00000000-0000-0000-0000-000000000011', 'pin-00000000-0000-0000-0000-000000000011@internal.local', '1008', '{"display_name":"Dan Igel","role":"operative"}'::jsonb),
+    ('00000000-0000-0000-0000-000000000012', 'pin-00000000-0000-0000-0000-000000000012@internal.local', '1009', '{"display_name":"Billy","role":"operative"}'::jsonb),
+    ('00000000-0000-0000-0000-000000000013', 'pin-00000000-0000-0000-0000-000000000013@internal.local', '1010', '{"display_name":"Mike","role":"operative"}'::jsonb),
+    ('00000000-0000-0000-0000-000000000014', 'pin-00000000-0000-0000-0000-000000000014@internal.local', '1011', '{"display_name":"Ray","role":"operative"}'::jsonb),
+    ('00000000-0000-0000-0000-000000000015', 'pin-00000000-0000-0000-0000-000000000015@internal.local', '1012', '{"display_name":"Adrian","role":"operative"}'::jsonb),
+    ('00000000-0000-0000-0000-000000000016', 'pin-00000000-0000-0000-0000-000000000016@internal.local', '1013', '{"display_name":"Danny","role":"operative"}'::jsonb),
+    ('00000000-0000-0000-0000-000000000017', 'pin-00000000-0000-0000-0000-000000000017@internal.local', '1014', '{"display_name":"Ashton","role":"operative"}'::jsonb)
+  on conflict (id) do update set
+    email = excluded.email,
+    encrypted_password = excluded.encrypted_password,
+    raw_user_meta_data = excluded.raw_user_meta_data;
+
+  -- Seed / Update Cloud9 Application Users (17 Staff Members with Role Tags & Team Tags)
+  insert into users (id, display_name, role, job_title, team_name, is_core_warehouse, pin_hash, hourly_cost, active) values
+    -- Core Warehouse Operatives (Erica, Sam, Alex, Mason)
+    ('00000000-0000-0000-0000-000000000001', 'Erica', 'operative', 'Warehouse Operative', 'Core Warehouse Team', true, '1111', 12.50, true),
+    ('00000000-0000-0000-0000-000000000002', 'Sam', 'operative', 'Warehouse Operative', 'Core Warehouse Team', true, '2222', 12.80, true),
+    ('00000000-0000-0000-0000-000000000003', 'Alex', 'operative', 'Warehouse Operative', 'Core Warehouse Team', true, '3333', 13.00, true),
+    ('00000000-0000-0000-0000-000000000007', 'Mason', 'operative', 'Warehouse Operative', 'Core Warehouse Team', true, '1004', 12.80, true),
+    -- Core Warehouse Supervisors (Mark, Edna)
+    ('00000000-0000-0000-0000-000000000004', 'Mark', 'supervisor', 'Warehouse Supervisor', 'Core Warehouse Team', true, '4444', 16.50, true),
+    ('00000000-0000-0000-0000-000000000006', 'Edna', 'supervisor', 'Warehouse Supervisor', 'Core Warehouse Team', true, '4445', 16.50, true),
+    -- CEO, Builder & Admin (Josh)
+    ('00000000-0000-0000-0000-000000000005', 'Josh', 'admin', 'CEO, Builder & Admin', 'Executive & Leadership', false, '9999', 25.00, true),
+    -- CCELL Specialist Operative (Ben)
+    ('00000000-0000-0000-0000-000000000008', 'Ben', 'operative', 'CCELL Operative', 'CCELL', false, '1005', 13.00, true),
+    -- Warehouse Operatives (Jess, Sabine)
+    ('00000000-0000-0000-0000-000000000009', 'Jess', 'operative', 'Warehouse Operative', 'Warehouse Team', false, '1006', 12.50, true),
+    ('00000000-0000-0000-0000-000000000010', 'Sabine', 'operative', 'Warehouse Operative', 'Warehouse Team', false, '1007', 12.50, true),
+    -- People & Operations / Cross-Department Warehouse Operatives
+    ('00000000-0000-0000-0000-000000000011', 'Dan Igel', 'operative', 'Head of People & Operations', 'People & Operations', false, '1008', 18.00, true),
+    ('00000000-0000-0000-0000-000000000012', 'Billy', 'operative', 'Operations', 'Operations', false, '1009', 15.00, true),
+    -- Sales (Warehouse Support Operatives: Mike, Ray)
+    ('00000000-0000-0000-0000-000000000013', 'Mike', 'operative', 'Sales', 'Sales', false, '1010', 15.00, true),
+    ('00000000-0000-0000-0000-000000000014', 'Ray', 'operative', 'Sales (Warehouse Support)', 'Sales', false, '1011', 15.00, true),
+    -- Marketing & Innovations (Warehouse Operatives: Adrian, Danny, Ashton)
+    ('00000000-0000-0000-0000-000000000015', 'Adrian', 'operative', 'Marketing & Innovations', 'Marketing & Innovations', false, '1012', 14.50, true),
+    ('00000000-0000-0000-0000-000000000016', 'Danny', 'operative', 'Marketing & Innovations', 'Marketing & Innovations', false, '1013', 14.50, true),
+    ('00000000-0000-0000-0000-000000000017', 'Ashton', 'operative', 'Marketing & Innovations', 'Marketing & Innovations', false, '1014', 14.50, true)
+  on conflict (id) do update set
+    display_name = excluded.display_name,
+    role = excluded.role,
+    job_title = excluded.job_title,
+    team_name = excluded.team_name,
+    is_core_warehouse = excluded.is_core_warehouse,
+    pin_hash = excluded.pin_hash,
+    active = excluded.active;
+
+  -- Seed initial Supervisor-Assigned tasks for Erica so "Assigned to You" tab works out of the box
   insert into assigned_tasks (id, user_id, client_id, task_type_id, order_ref, note, assigned_by, status)
   values
     (
@@ -732,13 +811,13 @@ export async function getDb(): Promise<PGlite> {
       const pg = new PGlite(dataDir);
       await pg.waitReady;
       await applySchemaAndSeed(pg, true, true);
-      globalForDb.__deeptimeMigratedV10 = true;
+      globalForDb.__deeptimeMigratedV11 = true;
       return pg;
     })();
-  } else if (!globalForDb.__deeptimeMigratedV10) {
+  } else if (!globalForDb.__deeptimeMigratedV11) {
     const pg = await globalForDb.__deeptimePgPromise;
     await pg.exec(UPGRADE_AND_STANDARD_TASKS_SQL);
-    globalForDb.__deeptimeMigratedV10 = true;
+    globalForDb.__deeptimeMigratedV11 = true;
   }
   return globalForDb.__deeptimePgPromise;
 }

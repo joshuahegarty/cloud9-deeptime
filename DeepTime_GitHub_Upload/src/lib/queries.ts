@@ -37,10 +37,11 @@ export async function getSettings(actorUserId: string | null = null): Promise<Ap
 export async function getActiveOperativesAndStaff(): Promise<UserPublic[]> {
   return withDbSession(null, async (tx) => {
     const res = await tx.query<UserPublic>(
-      `select id, display_name, role, active, created_at::text, updated_at::text
+      `select id, display_name, role, job_title, team_name, coalesce(is_core_warehouse, false) as is_core_warehouse, active, created_at::text, updated_at::text
        from users_public
        where active = true
        order by
+         coalesce(is_core_warehouse, false) desc,
          case role
            when 'operative' then 1
            when 'supervisor' then 2
@@ -294,10 +295,10 @@ export async function getOperativeNowData(userId: string) {
 export async function getFloorStatus(actorUserId: string | null = null) {
   return withDbSession(actorUserId, async (tx) => {
     const operativesRes = await tx.query<UserPublic>(
-      `select id, display_name, role, active, created_at::text, updated_at::text
+      `select id, display_name, role, job_title, team_name, coalesce(is_core_warehouse, false) as is_core_warehouse, active, created_at::text, updated_at::text
        from users_public
        where active = true and role = 'operative'
-       order by display_name asc`
+       order by coalesce(is_core_warehouse, false) desc, display_name asc`
     );
 
     const openAttendanceRes = await tx.query<Attendance>(
@@ -551,7 +552,9 @@ export async function getAdminUsers(actorUserId: string): Promise<UserAdmin[]> {
   return withDbSession(actorUserId, async (tx) => {
     const res = await tx.query<UserAdmin>(
       `select
-         u.id, u.display_name, u.role, u.pin_hash,
+         u.id, u.display_name, u.role, u.job_title, u.team_name,
+         coalesce(u.is_core_warehouse, false) as is_core_warehouse,
+         u.pin_hash,
          u.hourly_cost::float8 as hourly_cost,
          u.active, u.created_at::text, u.updated_at::text,
          au.email
@@ -564,6 +567,7 @@ export async function getAdminUsers(actorUserId: string): Promise<UserAdmin[]> {
            when 'operative' then 3
            else 4
          end,
+         coalesce(u.is_core_warehouse, false) desc,
          u.display_name asc`
     );
     return res.rows;

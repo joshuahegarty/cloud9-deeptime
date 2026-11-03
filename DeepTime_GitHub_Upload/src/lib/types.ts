@@ -8,6 +8,9 @@ export interface UserPublic {
   id: string;
   display_name: string;
   role: Role;
+  job_title?: string | null;
+  team_name?: string | null;
+  is_core_warehouse?: boolean;
   active: boolean;
   created_at: string;
   updated_at: string;

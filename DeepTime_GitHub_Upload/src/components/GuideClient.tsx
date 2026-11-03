@@ -529,60 +529,52 @@ export function GuideClient() {
             </div>
           </div>
 
-          {/* Credentials Table */}
+          {/* Cloud9 Team Directory & Credentials Table */}
           <div className="overflow-x-auto rounded-xl border border-slate-800 print:border-slate-300">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-950 text-slate-300 uppercase text-[11px] font-black print:bg-slate-100 print:text-slate-800">
                 <tr>
-                  <th className="py-3 px-4">Role</th>
-                  <th className="py-3 px-4">Demo User</th>
+                  <th className="py-3 px-4">Access Role</th>
+                  <th className="py-3 px-4">Team Member</th>
+                  <th className="py-3 px-4">Role Tag / Job Title</th>
+                  <th className="py-3 px-4">Team / Department</th>
                   <th className="py-3 px-4">4-Digit PIN</th>
-                  <th className="py-3 px-4">Staff Email</th>
-                  <th className="py-3 px-4">Password</th>
-                  <th className="py-3 px-4">Authorised Screens</th>
+                  <th className="py-3 px-4">Staff Email &amp; Password</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800 bg-slate-900/60 print:bg-white print:divide-slate-200">
-                <tr>
-                  <td className="py-2.5 px-4 font-bold text-emerald-400">Operative</td>
-                  <td className="py-2.5 px-4 font-semibold text-white print:text-slate-950">Liam Grayson</td>
-                  <td className="py-2.5 px-4 font-mono font-bold text-emerald-300">1111</td>
-                  <td className="py-2.5 px-4 text-slate-500">PIN Only</td>
-                  <td className="py-2.5 px-4 text-slate-500">—</td>
-                  <td className="py-2.5 px-4 font-mono text-slate-300">/kiosk, /now</td>
-                </tr>
-                <tr>
-                  <td className="py-2.5 px-4 font-bold text-emerald-400">Operative</td>
-                  <td className="py-2.5 px-4 font-semibold text-white print:text-slate-950">Chloe Marsh</td>
-                  <td className="py-2.5 px-4 font-mono font-bold text-emerald-300">2222</td>
-                  <td className="py-2.5 px-4 text-slate-500">PIN Only</td>
-                  <td className="py-2.5 px-4 text-slate-500">—</td>
-                  <td className="py-2.5 px-4 font-mono text-slate-300">/kiosk, /now</td>
-                </tr>
-                <tr>
-                  <td className="py-2.5 px-4 font-bold text-emerald-400">Operative</td>
-                  <td className="py-2.5 px-4 font-semibold text-white print:text-slate-950">Tariq Mahmood</td>
-                  <td className="py-2.5 px-4 font-mono font-bold text-emerald-300">3333</td>
-                  <td className="py-2.5 px-4 text-slate-500">PIN Only</td>
-                  <td className="py-2.5 px-4 text-slate-500">—</td>
-                  <td className="py-2.5 px-4 font-mono text-slate-300">/kiosk, /now</td>
-                </tr>
-                <tr>
-                  <td className="py-2.5 px-4 font-bold text-sky-400">Supervisor</td>
-                  <td className="py-2.5 px-4 font-semibold text-white print:text-slate-950">Sarah Jenkins</td>
-                  <td className="py-2.5 px-4 font-mono font-bold text-sky-300">4444</td>
-                  <td className="py-2.5 px-4 font-mono text-slate-200">sarah@cloud9.local</td>
-                  <td className="py-2.5 px-4 font-mono text-slate-300">supervisor123</td>
-                  <td className="py-2.5 px-4 font-mono text-slate-300">/floor, /entries, /reports, /setup</td>
-                </tr>
-                <tr>
-                  <td className="py-2.5 px-4 font-bold text-purple-400">Admin</td>
-                  <td className="py-2.5 px-4 font-semibold text-white print:text-slate-950">Dan Hallam</td>
-                  <td className="py-2.5 px-4 font-mono font-bold text-purple-300">9999</td>
-                  <td className="py-2.5 px-4 font-mono text-slate-200">dan@cloud9.local</td>
-                  <td className="py-2.5 px-4 font-mono text-slate-300">admin123</td>
-                  <td className="py-2.5 px-4 font-mono text-slate-300">All Routes + Target &amp; Baseline Sign-Off</td>
-                </tr>
+                {[
+                  { access: 'Admin', color: 'text-amber-400', name: '👑 Josh', title: 'CEO, Builder & Admin', team: 'Executive & Leadership', core: false, pin: '9999', email: 'josh@cloud9fulfilment.co.uk (password123)' },
+                  { access: 'Supervisor', color: 'text-sky-400', name: '⭐ Mark', title: 'Warehouse Supervisor', team: 'Core Warehouse Team', core: true, pin: '4444', email: 'mark@cloud9fulfilment.co.uk (password123)' },
+                  { access: 'Supervisor', color: 'text-sky-400', name: '⭐ Edna', title: 'Warehouse Supervisor', team: 'Core Warehouse Team', core: true, pin: '4445', email: 'edna@cloud9fulfilment.co.uk (password123)' },
+                  { access: 'Operative', color: 'text-emerald-400', name: '⭐ Erica', title: 'Warehouse Operative', team: 'Core Warehouse Team', core: true, pin: '1111', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: '⭐ Sam', title: 'Warehouse Operative', team: 'Core Warehouse Team', core: true, pin: '2222', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: '⭐ Alex', title: 'Warehouse Operative', team: 'Core Warehouse Team', core: true, pin: '3333', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: '⭐ Mason', title: 'Warehouse Operative', team: 'Core Warehouse Team', core: true, pin: '1004', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Ben', title: 'CCELL Operative', team: 'CCELL', core: false, pin: '1005', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Jess', title: 'Warehouse Operative', team: 'Warehouse Team', core: false, pin: '1006', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Sabine', title: 'Warehouse Operative', team: 'Warehouse Team', core: false, pin: '1007', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Dan Igel', title: 'Head of People & Operations', team: 'People & Operations', core: false, pin: '1008', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Billy', title: 'Operations', team: 'Operations', core: false, pin: '1009', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Mike', title: 'Sales', team: 'Sales', core: false, pin: '1010', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Ray', title: 'Sales (Warehouse Support)', team: 'Sales', core: false, pin: '1011', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Adrian', title: 'Marketing & Innovations', team: 'Marketing & Innovations', core: false, pin: '1012', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Danny', title: 'Marketing & Innovations', team: 'Marketing & Innovations', core: false, pin: '1013', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Ashton', title: 'Marketing & Innovations', team: 'Marketing & Innovations', core: false, pin: '1014', email: 'PIN / Kiosk Tap' },
+                ].map((m) => (
+                  <tr key={m.pin}>
+                    <td className={`py-2.5 px-4 font-bold ${m.color}`}>{m.access}</td>
+                    <td className="py-2.5 px-4 font-bold text-white print:text-slate-950">{m.name}</td>
+                    <td className="py-2.5 px-4 text-sky-300 font-semibold print:text-slate-700">{m.title}</td>
+                    <td className="py-2.5 px-4">
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${m.core ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 text-purple-300'}`}>
+                        {m.team}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-4 font-mono font-bold text-emerald-300">{m.pin}</td>
+                    <td className="py-2.5 px-4 font-mono text-slate-300">{m.email}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

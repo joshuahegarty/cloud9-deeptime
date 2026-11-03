@@ -185,6 +185,9 @@ export function SetupClient({
       id: userModal.id,
       displayName: userModal.display_name || '',
       role: (userModal.role as Role) || 'operative',
+      jobTitle: userModal.job_title || null,
+      teamName: userModal.team_name || null,
+      isCoreWarehouse: Boolean(userModal.is_core_warehouse),
       pin: userModal.newPin !== undefined ? userModal.newPin : userModal.pin_hash,
       hourlyCost:
         userModal.hourly_cost !== null &&
@@ -592,8 +595,9 @@ export function SetupClient({
             <table className="w-full text-left border-collapse text-sm">
               <thead>
                 <tr className="border-b border-slate-800 text-xs font-bold uppercase text-slate-400">
-                  <th className="py-3 px-4">Display Name</th>
-                  <th className="py-3 px-4">Role</th>
+                  <th className="py-3 px-4">Team Member</th>
+                  <th className="py-3 px-4">Role Tag &amp; Team</th>
+                  <th className="py-3 px-4">System Access</th>
                   <th className="py-3 px-4">4-Digit PIN</th>
                   <th className="py-3 px-4">Hourly Cost (Admin Only)</th>
                   <th className="py-3 px-4">Status</th>
@@ -604,8 +608,27 @@ export function SetupClient({
                 {users.map((u) => (
                   <tr key={u.id} className="hover:bg-slate-800/40">
                     <td className="py-3.5 px-4 font-bold text-white">
-                      <div>{u.display_name}</div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span>{u.display_name}</span>
+                        {u.is_core_warehouse && (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-black uppercase">
+                            ⭐ Core Warehouse
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs font-mono text-slate-400">{u.email}</div>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-sky-300 text-xs font-bold">
+                          {u.job_title || u.role}
+                        </span>
+                        {u.team_name && (
+                          <span className="px-2 py-0.5 rounded bg-purple-950/60 border border-purple-500/30 text-purple-300 text-xs font-bold">
+                            {u.team_name}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3.5 px-4 uppercase text-xs font-black text-emerald-400">
                       {u.role}
@@ -1369,6 +1392,50 @@ export function SetupClient({
                 />
               </div>
             </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">
+                  Role Tag / Job Title
+                </label>
+                <input
+                  type="text"
+                  value={userModal.job_title || ''}
+                  onChange={(e) =>
+                    setUserModal({ ...userModal, job_title: e.target.value })
+                  }
+                  placeholder="e.g. Warehouse Operative, Sales, CCELL Operative"
+                  className="w-full h-11 px-3 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">
+                  Team / Department
+                </label>
+                <input
+                  type="text"
+                  value={userModal.team_name || ''}
+                  onChange={(e) =>
+                    setUserModal({ ...userModal, team_name: e.target.value })
+                  }
+                  placeholder="e.g. Core Warehouse Team, CCELL, Sales"
+                  className="w-full h-11 px-3 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm font-semibold"
+                />
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm font-bold text-emerald-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={Boolean(userModal.is_core_warehouse)}
+                onChange={(e) =>
+                  setUserModal({ ...userModal, is_core_warehouse: e.target.checked })
+                }
+                className="w-4 h-4 rounded accent-emerald-500"
+              />
+              ⭐ Core Warehouse Team Member (Erica, Sam, Alex, Mason, Mark, Edna)
+            </label>
 
             <div>
               <label className="block text-xs font-bold uppercase text-slate-400 mb-1">

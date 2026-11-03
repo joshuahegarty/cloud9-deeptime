@@ -39,9 +39,10 @@ export function LoginClient({ operatives }: LoginClientProps) {
   const [error, setError] = useState<string | null>(null);
 
   // Staff email/password state
-  const [email, setEmail] = useState('dan@cloud9fulfilment.co.uk');
+  const [email, setEmail] = useState('josh@cloud9fulfilment.co.uk');
   const [password, setPassword] = useState('password123');
   const [launchAsKiosk, setLaunchAsKiosk] = useState(false);
+  const [teamFilter, setTeamFilter] = useState<string>('all');
 
   const submitPin = async (pinToSubmit: string, userIdOverride?: string) => {
     if (pinLoading) return;
@@ -206,10 +207,34 @@ export function LoginClient({ operatives }: LoginClientProps) {
 
         {mode === 'pin' ? (
           <div>
+            {/* Team Filter Pills */}
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {[
+                { id: 'all', label: `All Staff (${operatives.length})` },
+                { id: 'core', label: '⭐ Core Warehouse Team (6)' },
+                { id: 'ccell_wh', label: 'CCELL & Warehouse' },
+                { id: 'sales_ops', label: 'Sales, Ops & People' },
+                { id: 'marketing', label: 'Marketing & Innovations' },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTeamFilter(t.id)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+                    teamFilter === t.id
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-black'
+                      : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
             {/* Optional Operative Name Filter */}
             <div className="mb-4">
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                Operative (optional — or enter 4-digit PIN directly)
+                Team Member (optional — or enter 4-digit PIN directly)
               </label>
               <select
                 value={selectedUserId}
@@ -218,14 +243,30 @@ export function LoginClient({ operatives }: LoginClientProps) {
                   setPin('');
                   setError(null);
                 }}
-                className="w-full h-14 px-4 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-base focus:outline-none focus:border-emerald-500"
+                className="w-full h-14 px-4 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-sm focus:outline-none focus:border-emerald-500"
               >
                 <option value="">Any User (Match by 4-Digit PIN)</option>
-                {operatives.map((op) => (
-                  <option key={op.id} value={op.id}>
-                    {op.display_name}
-                  </option>
-                ))}
+                {operatives
+                  .filter((op) => {
+                    if (teamFilter === 'core') return Boolean(op.is_core_warehouse);
+                    if (teamFilter === 'ccell_wh')
+                      return op.team_name === 'CCELL' || op.team_name === 'Warehouse Team';
+                    if (teamFilter === 'sales_ops')
+                      return (
+                        op.team_name === 'Sales' ||
+                        op.team_name === 'Operations' ||
+                        op.team_name === 'People & Operations'
+                      );
+                    if (teamFilter === 'marketing')
+                      return op.team_name === 'Marketing & Innovations';
+                    return true;
+                  })
+                  .map((op) => (
+                    <option key={op.id} value={op.id}>
+                      {op.is_core_warehouse ? '⭐ ' : ''}
+                      {op.display_name} — {op.job_title || op.role} ({op.team_name || 'Warehouse'})
+                    </option>
+                  ))}
               </select>
             </div>
 
@@ -306,48 +347,70 @@ export function LoginClient({ operatives }: LoginClientProps) {
               <ArrowRight className="w-5 h-5" />
             </button>
 
-            {/* Quick Seed PIN Helper for Testing */}
-            <div className="mt-6 pt-4 border-t border-slate-800 text-xs text-slate-400 space-y-1.5">
-              <div className="font-bold text-slate-300 uppercase tracking-wider">
-                1-Click Seeded PIN Sign-In:
+            {/* Quick Seed PIN Helper for Cloud9 Team */}
+            <div className="mt-6 pt-4 border-t border-slate-800 text-xs text-slate-400 space-y-2">
+              <div className="font-bold text-emerald-300 uppercase tracking-wider flex items-center justify-between">
+                <span>⭐ Core Warehouse Team (1-Click PIN):</span>
+                <span className="text-[10px] text-slate-400">Operatives &amp; Supervisors</span>
               </div>
               <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  disabled={pinLoading}
-                  onClick={() => {
-                    setPin('1111');
-                    submitPin('1111');
-                  }}
-                  className="p-2.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left"
-                >
-                  <div className="font-bold text-white">Liam G.</div>
-                  <div className="text-emerald-400 font-mono">PIN: 1111</div>
-                </button>
-                <button
-                  type="button"
-                  disabled={pinLoading}
-                  onClick={() => {
-                    setPin('2222');
-                    submitPin('2222');
-                  }}
-                  className="p-2.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left"
-                >
-                  <div className="font-bold text-white">Chloe M.</div>
-                  <div className="text-emerald-400 font-mono">PIN: 2222</div>
-                </button>
-                <button
-                  type="button"
-                  disabled={pinLoading}
-                  onClick={() => {
-                    setPin('3333');
-                    submitPin('3333');
-                  }}
-                  className="p-2.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left"
-                >
-                  <div className="font-bold text-white">Tariq M.</div>
-                  <div className="text-emerald-400 font-mono">PIN: 3333</div>
-                </button>
+                {[
+                  { name: 'Erica', role: 'Operative', team: 'Core Warehouse', pin: '1111' },
+                  { name: 'Sam', role: 'Operative', team: 'Core Warehouse', pin: '2222' },
+                  { name: 'Alex', role: 'Operative', team: 'Core Warehouse', pin: '3333' },
+                  { name: 'Mason', role: 'Operative', team: 'Core Warehouse', pin: '1004' },
+                  { name: 'Mark', role: 'Supervisor', team: 'Core Warehouse', pin: '4444' },
+                  { name: 'Edna', role: 'Supervisor', team: 'Core Warehouse', pin: '4445' },
+                ].map((m) => (
+                  <button
+                    key={m.pin}
+                    type="button"
+                    disabled={pinLoading}
+                    onClick={() => {
+                      setPin(m.pin);
+                      submitPin(m.pin);
+                    }}
+                    className="p-2 rounded-lg bg-slate-950 hover:bg-slate-800 border border-emerald-500/30 text-left transition"
+                  >
+                    <div className="font-black text-white text-xs">⭐ {m.name}</div>
+                    <div className="text-[10px] text-slate-400 truncate">{m.role}</div>
+                    <div className="text-emerald-400 font-mono text-[11px] font-bold">PIN: {m.pin}</div>
+                  </button>
+                ))}
+              </div>
+
+              <div className="font-bold text-sky-300 uppercase tracking-wider pt-2">
+                Cross-Department Warehouse Operatives &amp; Leadership:
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-52 overflow-y-auto pr-1">
+                {[
+                  { name: 'Josh', role: 'CEO, Builder & Admin', team: 'Executive', pin: '9999' },
+                  { name: 'Ben', role: 'CCELL Operative', team: 'CCELL', pin: '1005' },
+                  { name: 'Jess', role: 'Warehouse Operative', team: 'Warehouse', pin: '1006' },
+                  { name: 'Sabine', role: 'Warehouse Operative', team: 'Warehouse', pin: '1007' },
+                  { name: 'Dan Igel', role: 'Head of People & Ops', team: 'People & Ops', pin: '1008' },
+                  { name: 'Billy', role: 'Operations', team: 'Operations', pin: '1009' },
+                  { name: 'Mike', role: 'Sales', team: 'Sales', pin: '1010' },
+                  { name: 'Ray', role: 'Sales (WH Support)', team: 'Sales', pin: '1011' },
+                  { name: 'Adrian', role: 'Marketing & Innov.', team: 'Marketing', pin: '1012' },
+                  { name: 'Danny', role: 'Marketing & Innov.', team: 'Marketing', pin: '1013' },
+                  { name: 'Ashton', role: 'Marketing & Innov.', team: 'Marketing', pin: '1014' },
+                ].map((m) => (
+                  <button
+                    key={m.pin}
+                    type="button"
+                    disabled={pinLoading}
+                    onClick={() => {
+                      setPin(m.pin);
+                      submitPin(m.pin);
+                    }}
+                    className="p-2 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left transition"
+                  >
+                    <div className="font-bold text-white text-xs">{m.name}</div>
+                    <div className="text-[10px] text-sky-300 truncate">{m.role}</div>
+                    <div className="text-slate-400 font-mono text-[10px]">PIN: {m.pin}</div>
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -362,7 +425,7 @@ export function LoginClient({ operatives }: LoginClientProps) {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="dan@cloud9fulfilment.co.uk"
+                placeholder="josh@cloud9fulfilment.co.uk"
                 className="w-full h-14 px-4 rounded-xl bg-slate-950 border border-slate-700 text-white font-semibold focus:outline-none focus:border-emerald-500"
               />
             </div>
@@ -415,40 +478,59 @@ export function LoginClient({ operatives }: LoginClientProps) {
             {/* 1-Click Staff Sign-In Buttons */}
             <div className="mt-5 pt-4 border-t border-slate-800 text-xs text-slate-400 space-y-2">
               <div className="font-bold text-slate-300 uppercase tracking-wider">
-                1-Click Staff Sign-In (Password: password123):
+                1-Click Supervisor &amp; Admin Sign-In (Password: password123):
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <button
                   type="button"
                   disabled={staffLoading}
                   onClick={() => {
-                    setEmail('sarah@cloud9fulfilment.co.uk');
+                    setEmail('josh@cloud9fulfilment.co.uk');
                     setPassword('password123');
-                    executeStaffLogin('sarah@cloud9fulfilment.co.uk', 'password123');
+                    executeStaffLogin('josh@cloud9fulfilment.co.uk', 'password123');
                   }}
-                  className="p-2.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left"
+                  className="p-2.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-amber-500/40 text-left"
                 >
                   <div className="font-bold text-white flex items-center gap-1">
-                    <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-                    Sarah Jenkins
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                    Josh
                   </div>
-                  <div className="text-emerald-400">Sign In (Supervisor)</div>
+                  <div className="text-[10px] text-amber-300 font-bold">CEO, Builder &amp; Admin</div>
+                  <div className="text-[10px] text-slate-400">PIN: 9999</div>
                 </button>
                 <button
                   type="button"
                   disabled={staffLoading}
                   onClick={() => {
-                    setEmail('dan@cloud9fulfilment.co.uk');
+                    setEmail('mark@cloud9fulfilment.co.uk');
                     setPassword('password123');
-                    executeStaffLogin('dan@cloud9fulfilment.co.uk', 'password123');
+                    executeStaffLogin('mark@cloud9fulfilment.co.uk', 'password123');
                   }}
-                  className="p-2.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left"
+                  className="p-2.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-emerald-500/40 text-left"
                 >
                   <div className="font-bold text-white flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                    Dan Hallam
+                    <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    ⭐ Mark
                   </div>
-                  <div className="text-amber-400">Sign In (Admin)</div>
+                  <div className="text-[10px] text-emerald-300 font-bold">Supervisor • Core WH</div>
+                  <div className="text-[10px] text-slate-400">PIN: 4444</div>
+                </button>
+                <button
+                  type="button"
+                  disabled={staffLoading}
+                  onClick={() => {
+                    setEmail('edna@cloud9fulfilment.co.uk');
+                    setPassword('password123');
+                    executeStaffLogin('edna@cloud9fulfilment.co.uk', 'password123');
+                  }}
+                  className="p-2.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-emerald-500/40 text-left"
+                >
+                  <div className="font-bold text-white flex items-center gap-1">
+                    <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    ⭐ Edna
+                  </div>
+                  <div className="text-[10px] text-emerald-300 font-bold">Supervisor • Core WH</div>
+                  <div className="text-[10px] text-slate-400">PIN: 4445</div>
                 </button>
               </div>
             </div>

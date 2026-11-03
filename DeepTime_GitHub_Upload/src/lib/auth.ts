@@ -19,7 +19,7 @@ export async function getCurrentUser(): Promise<UserPublic | null> {
 
   return withDbSession(userId, async (tx) => {
     const res = await tx.query<UserPublic>(
-      `select id, display_name, role, active, created_at::text, updated_at::text
+      `select id, display_name, role, job_title, team_name, coalesce(is_core_warehouse, false) as is_core_warehouse, active, created_at::text, updated_at::text
        from users_public
        where id = $1 and active = true`,
       [userId]
