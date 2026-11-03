@@ -1,0 +1,393 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-slate-950 text-slate-50 antialiased selection:bg-emerald-500 selection:text-slate-950;
+  background-image: radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.06), transparent 45%);
+}
+
+/* ============================================================================
+   Cloud9 Fulfilment Branded Colour Mode (html.light / html.c9-brand)
+   Palette from https://www.cloud9fulfilment.co.uk/:
+   - Deep Ocean Ink: #0B2138 (--c9cc-ink)
+   - Ocean Navy Surface: #123055 / #16304A (--dark-background)
+   - Marine Panel: #173A4E / #1C3D50 (--_base-colours---heading-text)
+   - Cloud9 Teal Nav & Kicker: #11A4C7 / #23B0CF / #1DA9C6 (--nav-bar / --_typography---cteal)
+   - Cloud9 Coral Accent: #FE724C / #F0653E (--_base-colours---coral / --c9cc-accent)
+   ============================================================================ */
+html.light,
+html.c9-brand {
+  color-scheme: dark;
+}
+
+html.light body,
+html.light .c9-shell,
+html.c9-brand body,
+html.c9-brand .c9-shell {
+  background-color: #0B2138 !important;
+  color: #f6fdff !important;
+  background-image:
+    radial-gradient(circle at 18% 0%, rgba(17, 164, 199, 0.28), transparent 48%),
+    radial-gradient(circle at 85% 6%, rgba(254, 114, 76, 0.18), transparent 42%),
+    linear-gradient(180deg, #0B2138 0%, #0E2947 50%, #0B2138 100%) !important;
+}
+
+/* Sticky Top Nav Bar in Cloud9 Teal & Ocean Navy */
+html.light header.nav-bar,
+html.c9-brand header.nav-bar {
+  background: linear-gradient(90deg, #0B2138 0%, #123C5E 45%, #11A4C7 100%) !important;
+  border-bottom: 2px solid #FE724C !important;
+  box-shadow: 0 8px 28px rgba(11, 33, 56, 0.45) !important;
+}
+
+html.light .nav-bar::after,
+html.c9-brand .nav-bar::after {
+  height: 2px;
+  background: linear-gradient(90deg, #23B0CF, #FE724C, #23B0CF) !important;
+}
+
+/* Primary Cards, Modals & Containers -> Cloud9 Ocean Navy (#123055 / #16304A) */
+html.light .bg-slate-900,
+html.c9-brand .bg-slate-900 {
+  background-color: #123055 !important;
+  box-shadow: 0 10px 30px rgba(7, 20, 36, 0.35);
+}
+html.light .bg-slate-900\/95,
+html.c9-brand .bg-slate-900\/95 {
+  background-color: rgba(18, 48, 85, 0.96) !important;
+}
+html.light .bg-slate-900\/90,
+html.light .hover\:bg-slate-900\/90:hover,
+html.c9-brand .bg-slate-900\/90,
+html.c9-brand .hover\:bg-slate-900\/90:hover {
+  background-color: rgba(22, 48, 74, 0.95) !important;
+}
+html.light .bg-slate-900\/30,
+html.light .bg-slate-900\/40,
+html.light .bg-slate-900\/50,
+html.light .bg-slate-900\/60,
+html.c9-brand .bg-slate-900\/30,
+html.c9-brand .bg-slate-900\/40,
+html.c9-brand .bg-slate-900\/50,
+html.c9-brand .bg-slate-900\/60 {
+  background-color: rgba(18, 48, 85, 0.65) !important;
+}
+
+/* Recessed Surfaces, Inputs, Selects & Inner Panels -> Deep Cloud9 Ink (#0E2440) */
+html.light .bg-slate-950:not(.c9-shell),
+html.c9-brand .bg-slate-950:not(.c9-shell) {
+  background-color: #0E2440 !important;
+}
+html.light .bg-slate-950\/40,
+html.light .bg-slate-950\/50,
+html.light .bg-slate-950\/60,
+html.light .bg-slate-950\/70,
+html.light .bg-slate-950\/75,
+html.light .bg-slate-950\/80,
+html.light .bg-slate-950\/90,
+html.light .bg-slate-950\/95,
+html.light .bg-slate-950\/98,
+html.c9-brand .bg-slate-950\/40,
+html.c9-brand .bg-slate-950\/50,
+html.c9-brand .bg-slate-950\/60,
+html.c9-brand .bg-slate-950\/70,
+html.c9-brand .bg-slate-950\/75,
+html.c9-brand .bg-slate-950\/80,
+html.c9-brand .bg-slate-950\/90,
+html.c9-brand .bg-slate-950\/95,
+html.c9-brand .bg-slate-950\/98 {
+  background-color: rgba(11, 33, 56, 0.85) !important;
+}
+
+html.light input:not([type='checkbox']):not([type='radio']),
+html.light select,
+html.light textarea,
+html.c9-brand input:not([type='checkbox']):not([type='radio']),
+html.c9-brand select,
+html.c9-brand textarea {
+  background-color: #0B2138 !important;
+  color: #ffffff !important;
+  border-color: rgba(35, 176, 207, 0.45);
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder,
+html.c9-brand input::placeholder,
+html.c9-brand textarea::placeholder {
+  color: #7ea3be !important;
+}
+
+/* Secondary Buttons, Pills & Hover Surfaces -> Cloud9 Marine (#173A4E / #1C3D50) */
+html.light .bg-slate-800,
+html.light .bg-slate-800\/90,
+html.light .bg-slate-800\/80,
+html.c9-brand .bg-slate-800,
+html.c9-brand .bg-slate-800\/90,
+html.c9-brand .bg-slate-800\/80 {
+  background-color: #173A4E !important;
+}
+html.light .bg-slate-800\/40,
+html.c9-brand .bg-slate-800\/40 {
+  background-color: rgba(23, 58, 78, 0.55) !important;
+}
+html.light .hover\:bg-slate-700:hover,
+html.light .hover\:bg-slate-800:hover,
+html.light .hover\:bg-slate-800\/80:hover,
+html.c9-brand .hover\:bg-slate-700:hover,
+html.c9-brand .hover\:bg-slate-800:hover,
+html.c9-brand .hover\:bg-slate-800\/80:hover {
+  background-color: #1F4E68 !important;
+}
+
+/* Borders & Table Dividers -> Cloud9 Sky Teal Tint */
+html.light .border-slate-800,
+html.light .border-slate-800\/70,
+html.light .border-slate-800\/80,
+html.light .border-slate-800\/90,
+html.light .border-slate-900,
+html.c9-brand .border-slate-800,
+html.c9-brand .border-slate-800\/70,
+html.c9-brand .border-slate-800\/80,
+html.c9-brand .border-slate-800\/90,
+html.c9-brand .border-slate-900 {
+  border-color: rgba(35, 176, 207, 0.28) !important;
+}
+html.light .border-slate-700,
+html.light .border-slate-700\/80,
+html.c9-brand .border-slate-700,
+html.c9-brand .border-slate-700\/80 {
+  border-color: rgba(35, 176, 207, 0.42) !important;
+}
+html.light .divide-slate-800 > :not([hidden]) ~ :not([hidden]),
+html.light .divide-slate-800\/70 > :not([hidden]) ~ :not([hidden]),
+html.c9-brand .divide-slate-800 > :not([hidden]) ~ :not([hidden]),
+html.c9-brand .divide-slate-800\/70 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(35, 176, 207, 0.24) !important;
+}
+
+/* Typography Hierarchy -> Crisp White & Cloud9 Ice Blue (#cfeef8) */
+html.light .text-slate-300,
+html.c9-brand .text-slate-300 {
+  color: #d8f3fa !important;
+}
+html.light .text-slate-400,
+html.c9-brand .text-slate-400 {
+  color: #9ec5db !important;
+}
+html.light .text-slate-500,
+html.c9-brand .text-slate-500 {
+  color: #7ea3be !important;
+}
+
+/* Hero, Active Timer & Kiosk Card Gradients in Cloud9 Brand Mode */
+html.light .from-slate-900,
+html.c9-brand .from-slate-900 {
+  --tw-gradient-from: #123055 var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgba(18, 48, 85, 0) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+html.light .via-slate-900,
+html.c9-brand .via-slate-900 {
+  --tw-gradient-to: rgba(18, 48, 85, 0) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), #123055 var(--tw-gradient-via-position), var(--tw-gradient-to) !important;
+}
+html.light .to-slate-900,
+html.light .to-slate-900\/90,
+html.c9-brand .to-slate-900,
+html.c9-brand .to-slate-900\/90 {
+  --tw-gradient-to: #16304A var(--tw-gradient-to-position) !important;
+}
+html.light .to-slate-950,
+html.c9-brand .to-slate-950 {
+  --tw-gradient-to: #0B2138 var(--tw-gradient-to-position) !important;
+}
+
+/* Hide ugly scrollbars on horizontal nav/filter strips while keeping scroll functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Glove-friendly touch target utility (min 56px / 68px without forcing horizontal inline-flex on multi-line cards) */
+.btn-glove {
+  min-height: 56px;
+  @apply font-bold tracking-wide transition-all duration-150 active:scale-[0.99] select-none;
+}
+
+.btn-glove-lg {
+  min-height: 68px;
+  @apply font-extrabold tracking-wide transition-all duration-150 active:scale-[0.99] select-none;
+}
+
+/* Android / Mobile Handheld Touch Optimizations (Eliminate 300ms delay & accidental double-tap zoom on tally buttons) */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important; /* Prevent mobile browser auto-zoom on focus */
+  }
+}
+
+/* ============================================================================
+   Design Spec v4 — Clarity Pass (Tron Palette, Edge Glows & Typography)
+   ============================================================================ */
+.nav-bar {
+  position: relative;
+}
+
+.nav-bar::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(34, 211, 238, 0.2),
+    rgba(34, 211, 238, 0.4),
+    rgba(34, 211, 238, 0.2),
+    transparent
+  );
+}
+
+.card-interactive {
+  transition: box-shadow 150ms ease, border-color 150ms ease, background-color 150ms ease, transform 150ms ease;
+}
+
+.card-interactive:hover:not(:disabled) {
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.15), 0 0 4px rgba(34, 211, 238, 0.3);
+  border-color: rgba(34, 211, 238, 0.3) !important;
+}
+
+.card-selected {
+  border: 2px solid #2DD4BF !important;
+  box-shadow: 0 0 16px rgba(45, 212, 191, 0.2);
+}
+
+.timer-running {
+  border: 1px solid rgba(34, 211, 238, 0.3) !important;
+  border-left: 3px solid #22D3EE !important;
+  box-shadow: 0 0 30px rgba(34, 211, 238, 0.1), inset 0 0 30px rgba(34, 211, 238, 0.03);
+}
+
+.play-btn {
+  transition: box-shadow 150ms ease, background-color 150ms ease, transform 150ms ease;
+}
+
+.play-btn:hover:not(:disabled) {
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+}
+
+.section-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+  margin: 24px 0;
+}
+
+html.light .section-divider,
+html.c9-brand .section-divider {
+  background: linear-gradient(90deg, transparent, rgba(35, 176, 207, 0.35), transparent);
+}
+
+.v4-section-title {
+  font-size: 16px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #E8E8E8;
+}
+
+.v4-entries-receded {
+  background-color: rgba(255, 255, 255, 0.015);
+  border-left: 3px solid #888888;
+}
+
+html.light .v4-entries-receded,
+html.c9-brand .v4-entries-receded {
+  background-color: rgba(14, 36, 64, 0.85) !important;
+  border-left: 3px solid #23B0CF !important;
+}
+
+/* Cloud9 Branded Colour Mode Overrides for Station Containers, Task Cards & Brand Accents */
+html.light .bg-\[\#0B0F19\],
+html.light .bg-\[\#0B101D\],
+html.light .bg-\[\#0A121E\],
+html.light .bg-\[\#071322\],
+html.light .bg-\[\#170F06\],
+html.c9-brand .bg-\[\#0B0F19\],
+html.c9-brand .bg-\[\#0B101D\],
+html.c9-brand .bg-\[\#0A121E\],
+html.c9-brand .bg-\[\#071322\],
+html.c9-brand .bg-\[\#170F06\] {
+  background-color: #123055 !important;
+  border-color: rgba(35, 176, 207, 0.35) !important;
+  box-shadow: 0 10px 28px rgba(7, 20, 36, 0.32) !important;
+}
+
+html.light .bg-\[\#0B1A2C\],
+html.light .bg-\[\#091522\]\/80,
+html.c9-brand .bg-\[\#0B1A2C\],
+html.c9-brand .bg-\[\#091522\]\/80 {
+  background-color: #163A5F !important;
+}
+html.light .hover\:bg-\[\#0E223A\]:hover,
+html.c9-brand .hover\:bg-\[\#0E223A\]:hover {
+  background-color: #1D4B78 !important;
+}
+
+html.light .bg-\[\#231508\],
+html.light .bg-\[\#1C1207\]\/80,
+html.c9-brand .bg-\[\#231508\],
+html.c9-brand .bg-\[\#1C1207\]\/80 {
+  background-color: #1C3554 !important;
+}
+html.light .hover\:bg-\[\#2C1A0A\]:hover,
+html.c9-brand .hover\:bg-\[\#2C1A0A\]:hover {
+  background-color: #244369 !important;
+}
+
+/* Signature Cloud9 Coral (#FE724C) & Sky Teal (#11A4C7) Highlights in Branded Mode */
+html.light .bg-emerald-500,
+html.c9-brand .bg-emerald-500 {
+  background-color: #FE724C !important;
+  color: #ffffff !important;
+}
+html.light .hover\:bg-emerald-400:hover,
+html.c9-brand .hover\:bg-emerald-400:hover {
+  background-color: #F0653E !important;
+  color: #ffffff !important;
+}
+html.light .text-\[\#E8E8E8\],
+html.c9-brand .text-\[\#E8E8E8\] {
+  color: #ffffff !important;
+}
+html.light .text-\[\#888888\],
+html.light .text-\[\#999999\],
+html.c9-brand .text-\[\#888888\],
+html.c9-brand .text-\[\#999999\] {
+  color: #b4d8eb !important;
+}
+html.light .text-\[\#666666\],
+html.c9-brand .text-\[\#666666\] {
+  color: #8ab6cf !important;
+}

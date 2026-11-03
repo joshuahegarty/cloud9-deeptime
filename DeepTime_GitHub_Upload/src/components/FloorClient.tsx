@@ -4,6 +4,7 @@ import {
   assignTaskToOperativeAction,
   clockInAction,
   clockOutAction,
+  kioskTapOperativeAction,
   resumeOperativeOnCrewAction,
   reviewBillingEntryAction,
   runIdleAutoStopJobAction,
@@ -26,6 +27,7 @@ import { AppSettings, Attendance, Client, TaskType, TimeEntry, UserPublic } from
 import {
   Activity,
   AlertTriangle,
+  ArrowRight,
   Check,
   ChevronDown,
   Clock,
@@ -473,6 +475,18 @@ export function FloorClient({
     setBusy(false);
     await fetchLatestFloor();
     router.refresh();
+  };
+
+  const handleOpenOperativeTimer = async (operative: UserPublic) => {
+    setBusy(true);
+    const res = await kioskTapOperativeAction({ userId: operative.id });
+    setBusy(false);
+    if (res.ok) {
+      router.push('/now');
+      router.refresh();
+    } else {
+      setBanner(res.error || `Could not open timer for ${operative.display_name}.`);
+    }
   };
 
   const handleToggleClockInOut = async (
@@ -1114,6 +1128,16 @@ export function FloorClient({
                               Clock In
                             </button>
                           )}
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => handleOpenOperativeTimer(operative)}
+                            className="px-3 py-2 rounded-lg bg-sky-500/20 hover:bg-sky-500 text-sky-300 hover:text-slate-950 border border-sky-500/40 text-xs font-black inline-flex items-center gap-1 transition"
+                            title={`Clock in (if needed) and open ${operative.display_name}'s live task timer`}
+                          >
+                            <span>Open Timer</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
                     </tr>

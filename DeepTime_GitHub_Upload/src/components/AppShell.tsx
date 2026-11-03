@@ -100,7 +100,6 @@ export function AppShell({ user, children }: AppShellProps) {
   const [isOnline, setIsOnline] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
-  const [isKioskDevice, setIsKioskDevice] = useState(false);
   const [lightMode, setLightMode] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -204,7 +203,7 @@ export function AppShell({ user, children }: AppShellProps) {
             window.sessionStorage.setItem(guardKey, 'done');
             await runShiftEndJobAction();
             await logoutAction();
-            router.push(isKioskDevice ? '/kiosk' : '/login');
+            router.push('/login');
             router.refresh();
           }
         }
@@ -214,7 +213,7 @@ export function AppShell({ user, children }: AppShellProps) {
     };
     const interval = setInterval(checkAfter7pm, 60000);
     return () => clearInterval(interval);
-  }, [user, isKioskDevice, router]);
+  }, [user, router]);
 
   // Global F8 shortcut listener: opens/toggles Bug Report & Feature Request modal from any screen
   useEffect(() => {
@@ -262,13 +261,9 @@ export function AppShell({ user, children }: AppShellProps) {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
 
-    const checkKioskState = () => {
-      const fromStorage = window.localStorage.getItem('kiosk') === 'true';
-      const fromQuery = window.location.search.includes('kiosk=1');
-      setIsKioskDevice(fromStorage || fromQuery);
-    };
-
-    checkKioskState();
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('kiosk');
+    }
 
     const savedTheme = window.localStorage.getItem('c9_theme');
     if (savedTheme === 'light' || savedTheme === 'c9') {
@@ -292,38 +287,17 @@ export function AppShell({ user, children }: AppShellProps) {
     const handleQueueChange = () => {
       refreshQueueCount();
     };
-    const handleKioskChange = () => {
-      checkKioskState();
-    };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     window.addEventListener('c9-offline-queue-changed', handleQueueChange);
-    window.addEventListener('c9-kiosk-changed', handleKioskChange);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('c9-offline-queue-changed', handleQueueChange);
-      window.removeEventListener('c9-kiosk-changed', handleKioskChange);
     };
   }, [pathname, refreshQueueCount, syncOfflineQueue]);
-
-  // Enforce kiosk lock: if device is locked into kiosk mode, keep navigation on /kiosk, /now, or /login
-  useEffect(() => {
-    const lockedInStorage =
-      typeof window !== 'undefined' && window.localStorage.getItem('kiosk') === 'true';
-    if (
-      lockedInStorage &&
-      pathname !== '/kiosk' &&
-      pathname !== '/now' &&
-      pathname !== '/login' &&
-      pathname !== '/guide' &&
-      pathname !== '/feedback'
-    ) {
-      router.replace('/kiosk');
-    }
-  }, [isKioskDevice, pathname, router]);
 
   const toggleTheme = () => {
     const nextC9Brand = !lightMode;
@@ -339,28 +313,9 @@ export function AppShell({ user, children }: AppShellProps) {
     }
   };
 
-  const enableKioskMode = () => {
-    window.localStorage.setItem('kiosk', 'true');
-    setIsKioskDevice(true);
-    window.dispatchEvent(new CustomEvent('c9-kiosk-changed'));
-    router.push('/kiosk');
-  };
-
-  const exitKioskMode = () => {
-    window.localStorage.removeItem('kiosk');
-    setIsKioskDevice(false);
-    window.dispatchEvent(new CustomEvent('c9-kiosk-changed'));
-    if (pathname === '/now') {
-      router.replace('/now');
-    }
-    router.refresh();
-  };
-
   const handleQuickSwitchUser = async (targetUserId: string) => {
     if (!targetUserId) return;
     window.localStorage.removeItem('kiosk');
-    setIsKioskDevice(false);
-    window.dispatchEvent(new CustomEvent('c9-kiosk-changed'));
     const res = await quickSwitchUserAction({ userId: targetUserId });
     if (res.ok && res.user) {
       if (res.user.role === 'operative') {
@@ -373,11 +328,7 @@ export function AppShell({ user, children }: AppShellProps) {
 
   const handleLogout = async () => {
     await logoutAction();
-    if (isKioskDevice) {
-      router.push('/kiosk');
-    } else {
-      router.push('/login');
-    }
+    router.push('/login');
     router.refresh();
   };
 
@@ -390,7 +341,7 @@ export function AppShell({ user, children }: AppShellProps) {
         <div className="max-w-7xl mx-auto px-3 sm:px-5 h-16 flex items-center justify-between gap-2">
           {/* Brand Logo — Single Line, Never Wraps */}
           <Link
-            href={isKioskDevice ? '/kiosk' : user ? '/now' : '/login'}
+            href={user ? '/now' : '/login'}
             className="flex items-center gap-2.5 shrink-0 group"
           >
             <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-slate-950 flex items-center justify-center font-black text-sm shadow-md shadow-emerald-500/20 group-hover:scale-105 transition">
@@ -408,90 +359,69 @@ export function AppShell({ user, children }: AppShellProps) {
 
           {/* Desktop Navigation Links (>= lg) */}
           <nav className="hidden lg:flex items-center gap-1 overflow-x-auto no-scrollbar py-1">
-            {isKioskDevice ? (
+            {user && (
               <>
                 <NavLink
-                  href="/kiosk"
-                  active={pathname === '/kiosk'}
-                  icon={<Tablet className="w-3.5 h-3.5" />}
+                  href="/now"
+                  active={pathname === '/now'}
+                  icon={<Clock className="w-3.5 h-3.5" />}
                 >
-                  Kiosk Grid
+                  Now
                 </NavLink>
-                {user && (
-                  <NavLink
-                    href="/now?kiosk=1"
-                    active={pathname === '/now'}
-                    icon={<Clock className="w-3.5 h-3.5" />}
-                  >
-                    Active Timer ({user.display_name.split(' ')[0]})
-                  </NavLink>
+                {isStaff && (
+                  <>
+                    <NavLink
+                      href="/floor"
+                      active={pathname === '/floor'}
+                      icon={<Activity className="w-3.5 h-3.5" />}
+                    >
+                      Floor
+                    </NavLink>
+                    <NavLink
+                      href="/entries"
+                      active={pathname === '/entries'}
+                      icon={<ClipboardList className="w-3.5 h-3.5" />}
+                    >
+                      Entries
+                    </NavLink>
+                    <NavLink
+                      href="/reports"
+                      active={pathname === '/reports'}
+                      icon={<FileSpreadsheet className="w-3.5 h-3.5" />}
+                    >
+                      Reports
+                    </NavLink>
+                    <NavLink
+                      href="/reports/billing"
+                      active={pathname === '/reports/billing'}
+                      icon={<Receipt className="w-3.5 h-3.5" />}
+                    >
+                      Billing
+                    </NavLink>
+                    <NavLink
+                      href="/setup"
+                      active={pathname.startsWith('/setup')}
+                      icon={<Settings className="w-3.5 h-3.5" />}
+                    >
+                      Setup
+                    </NavLink>
+                  </>
                 )}
+                <NavLink
+                  href="/feedback"
+                  active={pathname === '/feedback'}
+                  icon={<Bug className="w-3.5 h-3.5" />}
+                >
+                  Feedback &amp; Roadmap
+                </NavLink>
+                <NavLink
+                  href="/guide"
+                  active={pathname === '/guide'}
+                  icon={<BookOpen className="w-3.5 h-3.5" />}
+                >
+                  Guide &amp; Mindmap
+                </NavLink>
               </>
-            ) : (
-              user && (
-                <>
-                  <NavLink
-                    href="/now"
-                    active={pathname === '/now'}
-                    icon={<Clock className="w-3.5 h-3.5" />}
-                  >
-                    Now
-                  </NavLink>
-                  {isStaff && (
-                    <>
-                      <NavLink
-                        href="/floor"
-                        active={pathname === '/floor'}
-                        icon={<Activity className="w-3.5 h-3.5" />}
-                      >
-                        Floor
-                      </NavLink>
-                      <NavLink
-                        href="/entries"
-                        active={pathname === '/entries'}
-                        icon={<ClipboardList className="w-3.5 h-3.5" />}
-                      >
-                        Entries
-                      </NavLink>
-                      <NavLink
-                        href="/reports"
-                        active={pathname === '/reports'}
-                        icon={<FileSpreadsheet className="w-3.5 h-3.5" />}
-                      >
-                        Reports
-                      </NavLink>
-                      <NavLink
-                        href="/reports/billing"
-                        active={pathname === '/reports/billing'}
-                        icon={<Receipt className="w-3.5 h-3.5" />}
-                      >
-                        Billing
-                      </NavLink>
-                      <NavLink
-                        href="/setup"
-                        active={pathname.startsWith('/setup')}
-                        icon={<Settings className="w-3.5 h-3.5" />}
-                      >
-                        Setup
-                      </NavLink>
-                    </>
-                  )}
-                  <NavLink
-                    href="/feedback"
-                    active={pathname === '/feedback'}
-                    icon={<Bug className="w-3.5 h-3.5" />}
-                  >
-                    Feedback &amp; Roadmap
-                  </NavLink>
-                  <NavLink
-                    href="/guide"
-                    active={pathname === '/guide'}
-                    icon={<BookOpen className="w-3.5 h-3.5" />}
-                  >
-                    Guide &amp; Mindmap
-                  </NavLink>
-                </>
-              )
             )}
           </nav>
 
@@ -529,18 +459,6 @@ export function AppShell({ user, children }: AppShellProps) {
                 <Wifi className="w-3 h-3" />
                 Online
               </span>
-            )}
-
-            {isKioskDevice && (
-              <button
-                type="button"
-                onClick={exitKioskMode}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black bg-amber-500 hover:bg-amber-400 text-slate-950 shadow whitespace-nowrap transition"
-                title="Exit Kiosk Mode and restore full navigation"
-              >
-                <Unlock className="w-3.5 h-3.5" />
-                Exit Kiosk
-              </button>
             )}
 
             <button
@@ -713,137 +631,106 @@ export function AppShell({ user, children }: AppShellProps) {
                 Navigation Menu
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {isKioskDevice ? (
+                <Link
+                  href="/now"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
+                    pathname === '/now'
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                      : 'bg-slate-900 text-slate-200 border-slate-800'
+                  }`}
+                >
+                  <Clock className="w-4 h-4 shrink-0" />
+                  <span>Now (Timer)</span>
+                </Link>
+                {isStaff && (
                   <>
                     <Link
-                      href="/kiosk"
+                      href="/floor"
                       onClick={() => setMobileMenuOpen(false)}
                       className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
-                        pathname === '/kiosk'
+                        pathname === '/floor'
                           ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
                           : 'bg-slate-900 text-slate-200 border-slate-800'
                       }`}
                     >
-                      <Tablet className="w-4 h-4 shrink-0" />
-                      <span>Kiosk Grid</span>
+                      <Activity className="w-4 h-4 shrink-0" />
+                      <span>Floor Live</span>
                     </Link>
                     <Link
-                      href="/now?kiosk=1"
+                      href="/entries"
                       onClick={() => setMobileMenuOpen(false)}
                       className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
-                        pathname === '/now'
+                        pathname === '/entries'
                           ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
                           : 'bg-slate-900 text-slate-200 border-slate-800'
                       }`}
                     >
-                      <Clock className="w-4 h-4 shrink-0" />
-                      <span>Active Timer ({user.display_name.split(' ')[0]})</span>
-                    </Link>
-                  </>
-                ) : (
-                  <>
-                    <Link
-                      href="/now"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
-                        pathname === '/now'
-                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
-                          : 'bg-slate-900 text-slate-200 border-slate-800'
-                      }`}
-                    >
-                      <Clock className="w-4 h-4 shrink-0" />
-                      <span>Now (Timer)</span>
-                    </Link>
-                    {isStaff && (
-                      <>
-                        <Link
-                          href="/floor"
-                          onClick={() => setMobileMenuOpen(false)}
-                          className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
-                            pathname === '/floor'
-                              ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
-                              : 'bg-slate-900 text-slate-200 border-slate-800'
-                          }`}
-                        >
-                          <Activity className="w-4 h-4 shrink-0" />
-                          <span>Floor Live</span>
-                        </Link>
-                        <Link
-                          href="/entries"
-                          onClick={() => setMobileMenuOpen(false)}
-                          className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
-                            pathname === '/entries'
-                              ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
-                              : 'bg-slate-900 text-slate-200 border-slate-800'
-                          }`}
-                        >
-                          <ClipboardList className="w-4 h-4 shrink-0" />
-                          <span>Entries</span>
-                        </Link>
-                        <Link
-                          href="/reports"
-                          onClick={() => setMobileMenuOpen(false)}
-                          className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
-                            pathname === '/reports'
-                              ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
-                              : 'bg-slate-900 text-slate-200 border-slate-800'
-                          }`}
-                        >
-                          <FileSpreadsheet className="w-4 h-4 shrink-0" />
-                          <span>Reports</span>
-                        </Link>
-                        <Link
-                          href="/reports/billing"
-                          onClick={() => setMobileMenuOpen(false)}
-                          className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
-                            pathname === '/reports/billing'
-                              ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
-                              : 'bg-slate-900 text-slate-200 border-slate-800'
-                          }`}
-                        >
-                          <Receipt className="w-4 h-4 shrink-0" />
-                          <span>Billing</span>
-                        </Link>
-                        <Link
-                          href="/setup"
-                          onClick={() => setMobileMenuOpen(false)}
-                          className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
-                            pathname.startsWith('/setup')
-                              ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
-                              : 'bg-slate-900 text-slate-200 border-slate-800'
-                          }`}
-                        >
-                          <Settings className="w-4 h-4 shrink-0" />
-                          <span>Setup</span>
-                        </Link>
-                      </>
-                    )}
-                    <Link
-                      href="/feedback"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
-                        pathname === '/feedback'
-                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
-                          : 'bg-slate-900 text-slate-200 border-slate-800'
-                      }`}
-                    >
-                      <Bug className="w-4 h-4 shrink-0" />
-                      <span>Feedback Board</span>
+                      <ClipboardList className="w-4 h-4 shrink-0" />
+                      <span>Entries</span>
                     </Link>
                     <Link
-                      href="/guide"
+                      href="/reports"
                       onClick={() => setMobileMenuOpen(false)}
                       className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
-                        pathname === '/guide'
+                        pathname === '/reports'
                           ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
                           : 'bg-slate-900 text-slate-200 border-slate-800'
                       }`}
                     >
-                      <BookOpen className="w-4 h-4 shrink-0" />
-                      <span>Guide &amp; Mindmap</span>
+                      <FileSpreadsheet className="w-4 h-4 shrink-0" />
+                      <span>Reports</span>
+                    </Link>
+                    <Link
+                      href="/reports/billing"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
+                        pathname === '/reports/billing'
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                          : 'bg-slate-900 text-slate-200 border-slate-800'
+                      }`}
+                    >
+                      <Receipt className="w-4 h-4 shrink-0" />
+                      <span>Billing</span>
+                    </Link>
+                    <Link
+                      href="/setup"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
+                        pathname.startsWith('/setup')
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                          : 'bg-slate-900 text-slate-200 border-slate-800'
+                      }`}
+                    >
+                      <Settings className="w-4 h-4 shrink-0" />
+                      <span>Setup</span>
                     </Link>
                   </>
                 )}
+                <Link
+                  href="/feedback"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
+                    pathname === '/feedback'
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                      : 'bg-slate-900 text-slate-200 border-slate-800'
+                  }`}
+                >
+                  <Bug className="w-4 h-4 shrink-0" />
+                  <span>Feedback Board</span>
+                </Link>
+                <Link
+                  href="/guide"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
+                    pathname === '/guide'
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                      : 'bg-slate-900 text-slate-200 border-slate-800'
+                  }`}
+                >
+                  <BookOpen className="w-4 h-4 shrink-0" />
+                  <span>Guide &amp; Mindmap</span>
+                </Link>
               </div>
             </div>
 

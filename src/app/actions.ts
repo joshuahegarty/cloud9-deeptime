@@ -1914,6 +1914,34 @@ export async function toggleTaskTargetAction(params: {
   }
 }
 
+export async function toggleUserHandsFreeVoiceAction(params: {
+  userId: string;
+  enabled: boolean;
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const sessionUser = await getCurrentUser();
+    if (!sessionUser) {
+      return { ok: false, error: 'Not signed in.' };
+    }
+    if (sessionUser.role !== 'admin' && sessionUser.id !== params.userId) {
+      return { ok: false, error: 'Only admins or the user themselves can toggle Hands-Free Voice Mode.' };
+    }
+
+    await withDbSession(sessionUser.id, async (tx) => {
+      await tx.query(
+        `update users set hands_free_voice_enabled = $1 where id = $2`,
+        [Boolean(params.enabled), params.userId]
+      );
+    });
+
+    bumpRealtimeVersion();
+    revalidateAllPaths();
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Failed to toggle Hands-Free Voice Mode.' };
+  }
+}
+
 export async function upsertUserAction(params: {
   id?: string;
   displayName: string;
@@ -1923,6 +1951,7 @@ export async function upsertUserAction(params: {
   isCoreWarehouse?: boolean;
   pin?: string | null;
   mustChangePin?: boolean;
+  handsFreeVoiceEnabled?: boolean;
   hourlyCost: number | null;
   active: boolean;
   email?: string | null;
@@ -1953,8 +1982,9 @@ export async function upsertUserAction(params: {
              set display_name = $1, role = $2::role, job_title = $3, team_name = $4, is_core_warehouse = $5,
                  pin_hash = $6, hourly_cost = $7, active = $8,
                  email = coalesce($9, email),
-                 must_change_pin = coalesce($10, must_change_pin)
-             where id = $11`,
+                 must_change_pin = coalesce($10, must_change_pin),
+                 hands_free_voice_enabled = coalesce($11, hands_free_voice_enabled)
+             where id = $12`,
             [
               displayName,
               params.role,
@@ -1966,6 +1996,7 @@ export async function upsertUserAction(params: {
               params.active,
               cleanEmail,
               params.mustChangePin !== undefined ? Boolean(params.mustChangePin) : null,
+              params.handsFreeVoiceEnabled !== undefined ? Boolean(params.handsFreeVoiceEnabled) : null,
               params.id,
             ]
           );
@@ -1979,8 +2010,9 @@ export async function upsertUserAction(params: {
              set display_name = $1, role = $2::role, job_title = $3, team_name = $4, is_core_warehouse = $5,
                  hourly_cost = $6, active = $7,
                  email = coalesce($8, email),
-                 must_change_pin = coalesce($9, must_change_pin)
-             where id = $10`,
+                 must_change_pin = coalesce($9, must_change_pin),
+                 hands_free_voice_enabled = coalesce($10, hands_free_voice_enabled)
+             where id = $11`,
             [
               displayName,
               params.role,
@@ -1991,6 +2023,7 @@ export async function upsertUserAction(params: {
               params.active,
               cleanEmail,
               params.mustChangePin !== undefined ? Boolean(params.mustChangePin) : null,
+              params.handsFreeVoiceEnabled !== undefined ? Boolean(params.handsFreeVoiceEnabled) : null,
               params.id,
             ]
           );
@@ -2014,6 +2047,10 @@ export async function upsertUserAction(params: {
         const email = cleanEmail || `pin-${newUserId}@internal.local`;
         const password = params.password?.trim() || effectivePin;
         const mustChangePin = params.mustChangePin !== undefined ? Boolean(params.mustChangePin) : true;
+        const handsFreeVoiceEnabled =
+          params.handsFreeVoiceEnabled !== undefined
+            ? Boolean(params.handsFreeVoiceEnabled)
+            : displayName.toLowerCase() === 'josh';
 
         // If external Supabase Admin is configured, also provision in Supabase Auth
         const sbAdmin = getSupabaseAdminClient();
@@ -2034,8 +2071,8 @@ export async function upsertUserAction(params: {
         );
 
         await tx.query(
-          `insert into users (id, display_name, role, job_title, team_name, is_core_warehouse, email, must_change_pin, pin_hash, hourly_cost, active)
-           values ($1, $2, $3::role, $4, $5, $6, $7, $8, $9, $10, $11)`,
+          `insert into users (id, display_name, role, job_title, team_name, is_core_warehouse, email, must_change_pin, hands_free_voice_enabled, pin_hash, hourly_cost, active)
+           values ($1, $2, $3::role, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
           [
             newUserId,
             displayName,
@@ -2045,6 +2082,7 @@ export async function upsertUserAction(params: {
             isCoreWarehouse,
             cleanEmail,
             mustChangePin,
+            handsFreeVoiceEnabled,
             effectivePin,
             params.hourlyCost,
             params.active,

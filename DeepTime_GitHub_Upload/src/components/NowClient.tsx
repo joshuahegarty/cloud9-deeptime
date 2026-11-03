@@ -1508,12 +1508,8 @@ export function NowClient({
       });
       setRunningEntry(null);
       setShowStopUnitsModal(false);
-      if (isKioskMode) {
-        router.push('/kiosk');
-      } else {
-        setFeedback('You have clocked out and closed your shift.');
-        router.refresh();
-      }
+      setFeedback('You have clocked out and closed your shift.');
+      router.refresh();
     } catch {
       await enqueueOfflineAction('clock_out', {
         userId: user.id,
@@ -1523,9 +1519,6 @@ export function NowClient({
       });
       setRunningEntry(null);
       setShowStopUnitsModal(false);
-      if (isKioskMode) {
-        router.push('/kiosk');
-      }
     } finally {
       setBusy(false);
     }
@@ -1758,13 +1751,6 @@ export function NowClient({
     }
   };
 
-  const exitKioskFromBanner = () => {
-    window.localStorage.removeItem('kiosk');
-    setIsKioskMode(false);
-    window.dispatchEvent(new CustomEvent('c9-kiosk-changed'));
-    router.replace('/now');
-  };
-
   const isManagerOrAdmin = user.role === 'supervisor' || user.role === 'admin';
   const isHandsFreeVoiceEnabled =
     user.hands_free_voice_enabled !== undefined
@@ -1773,56 +1759,8 @@ export function NowClient({
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-12">
-      {/* Kiosk Session Banner OR Personal Shift Status Strip */}
-      {isKioskMode ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 p-4 sm:px-5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-slate-900 border border-amber-500/40 shadow-lg">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 flex items-center justify-center shrink-0">
-              <Tablet className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-[11px] font-black uppercase tracking-wider text-amber-300">
-                Kiosk Session Active
-              </div>
-              <div className="text-base font-black text-white flex flex-wrap items-center gap-2">
-                <span>{user.display_name}</span>
-                {openAttendance && (
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    Clocked in {formatLondonTime(openAttendance.clock_in)}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => router.push('/kiosk')}
-              className="h-11 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs sm:text-sm font-bold border border-slate-700 flex items-center justify-center transition"
-            >
-              Switch Operative
-            </button>
-            <button
-              type="button"
-              onClick={exitKioskFromBanner}
-              className="h-11 px-4 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs sm:text-sm font-bold border border-amber-500/50 flex items-center justify-center gap-1.5 transition"
-            >
-              <Unlock className="w-4 h-4" />
-              Exit Kiosk Mode
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowClockOutConfirmModal(true)}
-              className="h-11 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs sm:text-sm font-black shadow flex items-center justify-center gap-1.5 transition"
-            >
-              <LogOut className="w-4 h-4" />
-              Clock Out
-            </button>
-          </div>
-        </div>
-      ) : (
-        openAttendance && (
+      {/* Personal Shift Status Strip */}
+      {openAttendance && (
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 rounded-2xl bg-slate-900/90 border border-slate-800">
             <div className="flex items-center gap-2.5 text-xs sm:text-sm">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -1867,7 +1805,6 @@ export function NowClient({
               </button>
             </div>
           </div>
-        )
       )}
 
       {/* BACKLOG FEATURE #3: HANDS-FREE VOICE COMMAND MODE PANEL (30:31-31:10) */}
