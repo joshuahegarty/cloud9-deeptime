@@ -596,7 +596,7 @@ export function SetupClient({
               <thead>
                 <tr className="border-b border-slate-800 text-xs font-bold uppercase text-slate-400">
                   <th className="py-3 px-4">Team Member</th>
-                  <th className="py-3 px-4">Role Tag &amp; Team</th>
+                  <th className="py-3 px-4">Role Tag</th>
                   <th className="py-3 px-4">System Access</th>
                   <th className="py-3 px-4">4-Digit PIN</th>
                   <th className="py-3 px-4">Hourly Cost (Admin Only)</th>
@@ -608,27 +608,13 @@ export function SetupClient({
                 {users.map((u) => (
                   <tr key={u.id} className="hover:bg-slate-800/40">
                     <td className="py-3.5 px-4 font-bold text-white">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span>{u.display_name}</span>
-                        {u.is_core_warehouse && (
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-black uppercase">
-                            ⭐ Core Warehouse
-                          </span>
-                        )}
-                      </div>
+                      <div>{u.display_name}</div>
                       <div className="text-xs font-mono text-slate-400">{u.email}</div>
                     </td>
                     <td className="py-3.5 px-4">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-sky-300 text-xs font-bold">
-                          {u.job_title || u.role}
-                        </span>
-                        {u.team_name && (
-                          <span className="px-2 py-0.5 rounded bg-purple-950/60 border border-purple-500/30 text-purple-300 text-xs font-bold">
-                            {u.team_name}
-                          </span>
-                        )}
-                      </div>
+                      <span className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700 text-sky-300 text-xs font-bold">
+                        {u.job_title || u.role}
+                      </span>
                     </td>
                     <td className="py-3.5 px-4 uppercase text-xs font-black text-emerald-400">
                       {u.role}

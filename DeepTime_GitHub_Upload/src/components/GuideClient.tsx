@@ -536,39 +536,37 @@ export function GuideClient() {
                 <tr>
                   <th className="py-3 px-4">Access Role</th>
                   <th className="py-3 px-4">Team Member</th>
-                  <th className="py-3 px-4">Role Tag / Job Title</th>
-                  <th className="py-3 px-4">Team / Department</th>
+                  <th className="py-3 px-4">Role Tag</th>
                   <th className="py-3 px-4">4-Digit PIN</th>
                   <th className="py-3 px-4">Staff Email &amp; Password</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800 bg-slate-900/60 print:bg-white print:divide-slate-200">
                 {[
-                  { access: 'Admin', color: 'text-amber-400', name: '👑 Josh', title: 'CEO, Builder & Admin', team: 'Executive & Leadership', core: false, pin: '9999', email: 'josh@cloud9fulfilment.co.uk (password123)' },
-                  { access: 'Supervisor', color: 'text-sky-400', name: '⭐ Mark', title: 'Warehouse Supervisor', team: 'Core Warehouse Team', core: true, pin: '4444', email: 'mark@cloud9fulfilment.co.uk (password123)' },
-                  { access: 'Supervisor', color: 'text-sky-400', name: '⭐ Edna', title: 'Warehouse Supervisor', team: 'Core Warehouse Team', core: true, pin: '4445', email: 'edna@cloud9fulfilment.co.uk (password123)' },
-                  { access: 'Operative', color: 'text-emerald-400', name: '⭐ Erica', title: 'Warehouse Operative', team: 'Core Warehouse Team', core: true, pin: '1111', email: 'PIN / Kiosk Tap' },
-                  { access: 'Operative', color: 'text-emerald-400', name: '⭐ Sam', title: 'Warehouse Operative', team: 'Core Warehouse Team', core: true, pin: '2222', email: 'PIN / Kiosk Tap' },
-                  { access: 'Operative', color: 'text-emerald-400', name: '⭐ Alex', title: 'Warehouse Operative', team: 'Core Warehouse Team', core: true, pin: '3333', email: 'PIN / Kiosk Tap' },
-                  { access: 'Operative', color: 'text-emerald-400', name: '⭐ Mason', title: 'Warehouse Operative', team: 'Core Warehouse Team', core: true, pin: '1004', email: 'PIN / Kiosk Tap' },
-                  { access: 'Operative', color: 'text-emerald-400', name: 'Ben', title: 'CCELL Operative', team: 'CCELL', core: false, pin: '1005', email: 'PIN / Kiosk Tap' },
-                  { access: 'Operative', color: 'text-emerald-400', name: 'Jess', title: 'Warehouse Operative', team: 'Warehouse Team', core: false, pin: '1006', email: 'PIN / Kiosk Tap' },
-                  { access: 'Operative', color: 'text-emerald-400', name: 'Sabine', title: 'Warehouse Operative', team: 'Warehouse Team', core: false, pin: '1007', email: 'PIN / Kiosk Tap' },
-                  { access: 'Operative', color: 'text-emerald-400', name: 'Dan Igel', title: 'Head of People & Operations', team: 'People & Operations', core: false, pin: '1008', email: 'PIN / Kiosk Tap' },
-                  { access: 'Operative', color: 'text-emerald-400', name: 'Billy', title: 'Operations', team: 'Operations', core: false, pin: '1009', email: 'PIN / Kiosk Tap' },
-                  { access: 'Operative', color: 'text-emerald-400', name: 'Mike', title: 'Sales', team: 'Sales', core: false, pin: '1010', email: 'PIN / Kiosk Tap' },
-                  { access: 'Operative', color: 'text-emerald-400', name: 'Ray', title: 'Sales (Warehouse Support)', team: 'Sales', core: false, pin: '1011', email: 'PIN / Kiosk Tap' },
-                  { access: 'Operative', color: 'text-emerald-400', name: 'Adrian', title: 'Marketing & Innovations', team: 'Marketing & Innovations', core: false, pin: '1012', email: 'PIN / Kiosk Tap' },
-                  { access: 'Operative', color: 'text-emerald-400', name: 'Danny', title: 'Marketing & Innovations', team: 'Marketing & Innovations', core: false, pin: '1013', email: 'PIN / Kiosk Tap' },
-                  { access: 'Operative', color: 'text-emerald-400', name: 'Ashton', title: 'Marketing & Innovations', team: 'Marketing & Innovations', core: false, pin: '1014', email: 'PIN / Kiosk Tap' },
+                  { access: 'Admin', color: 'text-amber-400', name: 'Josh', title: 'CEO, Builder & Admin', pin: '9999', email: 'josh@cloud9fulfilment.co.uk (password123)' },
+                  { access: 'Supervisor', color: 'text-sky-400', name: 'Mark', title: 'Supervisor • Core Warehouse', pin: '4444', email: 'mark@cloud9fulfilment.co.uk (password123)' },
+                  { access: 'Supervisor', color: 'text-sky-400', name: 'Edna', title: 'Supervisor • Core Warehouse', pin: '4445', email: 'edna@cloud9fulfilment.co.uk (password123)' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Erica', title: 'Core Warehouse Operative', pin: '1111', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Sam', title: 'Core Warehouse Operative', pin: '2222', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Alex', title: 'Core Warehouse Operative', pin: '3333', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Mason', title: 'Core Warehouse Operative', pin: '1004', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Ben', title: 'CCELL Operative', pin: '1005', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Jess', title: 'Warehouse Operative', pin: '1006', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Sabine', title: 'Warehouse Operative', pin: '1007', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Dan Igel', title: 'Head of People & Operations', pin: '1008', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Billy', title: 'Operations', pin: '1009', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Mike', title: 'Sales', pin: '1010', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Ray', title: 'Sales • Warehouse Operative', pin: '1011', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Adrian', title: 'Marketing & Innovations', pin: '1012', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Danny', title: 'Marketing & Innovations', pin: '1013', email: 'PIN / Kiosk Tap' },
+                  { access: 'Operative', color: 'text-emerald-400', name: 'Ashton', title: 'Marketing & Innovations', pin: '1014', email: 'PIN / Kiosk Tap' },
                 ].map((m) => (
                   <tr key={m.pin}>
                     <td className={`py-2.5 px-4 font-bold ${m.color}`}>{m.access}</td>
                     <td className="py-2.5 px-4 font-bold text-white print:text-slate-950">{m.name}</td>
-                    <td className="py-2.5 px-4 text-sky-300 font-semibold print:text-slate-700">{m.title}</td>
                     <td className="py-2.5 px-4">
-                      <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${m.core ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 text-purple-300'}`}>
-                        {m.team}
+                      <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-sky-300 text-[11px] font-bold">
+                        {m.title}
                       </span>
                     </td>
                     <td className="py-2.5 px-4 font-mono font-bold text-emerald-300">{m.pin}</td>

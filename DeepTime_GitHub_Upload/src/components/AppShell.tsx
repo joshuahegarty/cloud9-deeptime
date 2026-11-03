@@ -38,20 +38,20 @@ interface AppShellProps {
 }
 
 const DEMO_USERS = [
-  { id: '00000000-0000-0000-0000-000000000005', label: '👑 Josh — CEO, Builder & Admin' },
-  { id: '00000000-0000-0000-0000-000000000004', label: '⭐ Mark — Supervisor (Core Warehouse)' },
-  { id: '00000000-0000-0000-0000-000000000006', label: '⭐ Edna — Supervisor (Core Warehouse)' },
-  { id: '00000000-0000-0000-0000-000000000001', label: '⭐ Erica — Operative (Core Warehouse)' },
-  { id: '00000000-0000-0000-0000-000000000002', label: '⭐ Sam — Operative (Core Warehouse)' },
-  { id: '00000000-0000-0000-0000-000000000003', label: '⭐ Alex — Operative (Core Warehouse)' },
-  { id: '00000000-0000-0000-0000-000000000007', label: '⭐ Mason — Operative (Core Warehouse)' },
-  { id: '00000000-0000-0000-0000-000000000008', label: 'Ben — CCELL Operative (CCELL)' },
+  { id: '00000000-0000-0000-0000-000000000005', label: 'Josh — CEO, Builder & Admin' },
+  { id: '00000000-0000-0000-0000-000000000004', label: 'Mark — Supervisor • Core Warehouse' },
+  { id: '00000000-0000-0000-0000-000000000006', label: 'Edna — Supervisor • Core Warehouse' },
+  { id: '00000000-0000-0000-0000-000000000001', label: 'Erica — Core Warehouse Operative' },
+  { id: '00000000-0000-0000-0000-000000000002', label: 'Sam — Core Warehouse Operative' },
+  { id: '00000000-0000-0000-0000-000000000003', label: 'Alex — Core Warehouse Operative' },
+  { id: '00000000-0000-0000-0000-000000000007', label: 'Mason — Core Warehouse Operative' },
+  { id: '00000000-0000-0000-0000-000000000008', label: 'Ben — CCELL Operative' },
   { id: '00000000-0000-0000-0000-000000000009', label: 'Jess — Warehouse Operative' },
   { id: '00000000-0000-0000-0000-000000000010', label: 'Sabine — Warehouse Operative' },
-  { id: '00000000-0000-0000-0000-000000000011', label: 'Dan Igel — Head of People & Ops' },
+  { id: '00000000-0000-0000-0000-000000000011', label: 'Dan Igel — Head of People & Operations' },
   { id: '00000000-0000-0000-0000-000000000012', label: 'Billy — Operations' },
   { id: '00000000-0000-0000-0000-000000000013', label: 'Mike — Sales' },
-  { id: '00000000-0000-0000-0000-000000000014', label: 'Ray — Sales (Warehouse Support)' },
+  { id: '00000000-0000-0000-0000-000000000014', label: 'Ray — Sales • Warehouse Operative' },
   { id: '00000000-0000-0000-0000-000000000015', label: 'Adrian — Marketing & Innovations' },
   { id: '00000000-0000-0000-0000-000000000016', label: 'Danny — Marketing & Innovations' },
   { id: '00000000-0000-0000-0000-000000000017', label: 'Ashton — Marketing & Innovations' },
@@ -496,15 +496,10 @@ export function AppShell({ user, children }: AppShellProps) {
                 ) : (
                   <div className="flex items-center gap-1">
                     <span className="h-9 px-3 rounded-lg bg-slate-800 text-xs font-bold text-slate-100 border border-slate-700 inline-flex items-center gap-1.5">
-                      <span>{user.is_core_warehouse ? '⭐ ' : ''}{user.display_name}</span>
+                      <span>{user.display_name}</span>
                       {user.job_title && (
                         <span className="hidden sm:inline px-1.5 py-0.5 rounded bg-slate-900 text-sky-300 text-[10px]">
                           {user.job_title}
-                        </span>
-                      )}
-                      {user.team_name && (
-                        <span className="hidden lg:inline px-1.5 py-0.5 rounded bg-purple-950/60 text-purple-300 text-[10px]">
-                          {user.team_name}
                         </span>
                       )}
                     </span>

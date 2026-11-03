@@ -85,7 +85,6 @@ export function FloorClient({
 
   // Assign Task to Operative Modal (Item #7)
   const [showAssignModal, setShowAssignModal] = useState(false);
-  const [floorTeamFilter, setFloorTeamFilter] = useState<string>('all');
   const [assignOperativeId, setAssignOperativeId] = useState<string>(
     initialRows[0]?.operative.id ?? ''
   );
@@ -870,63 +869,13 @@ export function FloorClient({
         </div>
       )}
 
-      {/* Cloud9 Leadership, Supervisors & Team Roster Filter Strip */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="font-black uppercase tracking-wider text-slate-400">
-              Leadership &amp; Supervisors:
-            </span>
-            <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 font-bold">
-              👑 Josh — CEO, Builder &amp; Admin
-            </span>
-            <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-bold">
-              ⭐ Mark — Warehouse Supervisor (Core Warehouse Team)
-            </span>
-            <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-bold">
-              ⭐ Edna — Warehouse Supervisor (Core Warehouse Team)
-            </span>
-          </div>
-          <span className="text-[11px] font-bold text-slate-400">
-            ⭐ Core Warehouse Team: Erica, Sam, Alex, Mason, Mark &amp; Edna
-          </span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {[
-            { id: 'all', label: `All Floor Operatives (${rows.length})` },
-            {
-              id: 'core',
-              label: `⭐ Core Warehouse Operatives (${rows.filter((r) => r.operative.is_core_warehouse).length})`,
-            },
-            { id: 'ccell', label: 'CCELL (Ben)' },
-            { id: 'wh', label: 'Warehouse Team (Jess & Sabine)' },
-            { id: 'sales_ops', label: 'Sales, Ops & People (Mike, Ray, Billy, Dan Igel)' },
-            { id: 'marketing', label: 'Marketing & Innovations (Adrian, Danny, Ashton)' },
-          ].map((tf) => (
-            <button
-              key={tf.id}
-              type="button"
-              onClick={() => setFloorTeamFilter(tf.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black border transition ${
-                floorTeamFilter === tf.id
-                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow'
-                  : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
-              }`}
-            >
-              {tf.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Live Floor Table */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-800 bg-slate-950/60 text-[12px] font-bold uppercase tracking-[1px] text-[#E8E8E8]">
-                <th className="py-3.5 px-4">Operative, Role &amp; Team</th>
+                <th className="py-3.5 px-4">Operative</th>
                 <th className="py-3.5 px-4">Status</th>
                 <th className="py-3.5 px-4">Client</th>
                 <th className="py-3.5 px-4">Current Task</th>
@@ -935,22 +884,7 @@ export function FloorClient({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800 text-[13px]">
-              {rows
-                .filter(({ operative }) => {
-                  if (floorTeamFilter === 'core') return Boolean(operative.is_core_warehouse);
-                  if (floorTeamFilter === 'ccell') return operative.team_name === 'CCELL';
-                  if (floorTeamFilter === 'wh') return operative.team_name === 'Warehouse Team';
-                  if (floorTeamFilter === 'sales_ops')
-                    return (
-                      operative.team_name === 'Sales' ||
-                      operative.team_name === 'Operations' ||
-                      operative.team_name === 'People & Operations'
-                    );
-                  if (floorTeamFilter === 'marketing')
-                    return operative.team_name === 'Marketing & Innovations';
-                  return true;
-                })
-                .map(({ operative, attendance, runningEntry, lastEndedEntry }) => {
+              {rows.map(({ operative, attendance, runningEntry, lastEndedEntry }) => {
                 const isClockedIn = Boolean(attendance);
                 const isRunning = Boolean(runningEntry);
                 const idleInfo = idleMetricsByOperative.get(operative.id);
@@ -1010,23 +944,11 @@ export function FloorClient({
                     }`}
                   >
                     <td className="py-4 px-4 font-semibold text-[#E8E8E8] text-[15px]">
-                      <div className="flex flex-wrap items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span>{operative.display_name}</span>
-                        {operative.is_core_warehouse && (
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-black uppercase tracking-wider">
-                            ⭐ Core Warehouse
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
                         <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-sky-300 text-[10px] font-bold">
                           {operative.job_title || 'Warehouse Operative'}
                         </span>
-                        {operative.team_name && (
-                          <span className="px-2 py-0.5 rounded bg-purple-950/60 border border-purple-500/30 text-purple-300 text-[10px] font-bold">
-                            Team: {operative.team_name}
-                          </span>
-                        )}
                       </div>
                       {attendance && (
                         <div className="text-[11px] font-normal text-[#888888] mt-1">

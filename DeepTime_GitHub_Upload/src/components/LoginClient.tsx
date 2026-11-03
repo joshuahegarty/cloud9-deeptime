@@ -42,7 +42,6 @@ export function LoginClient({ operatives }: LoginClientProps) {
   const [email, setEmail] = useState('josh@cloud9fulfilment.co.uk');
   const [password, setPassword] = useState('password123');
   const [launchAsKiosk, setLaunchAsKiosk] = useState(false);
-  const [teamFilter, setTeamFilter] = useState<string>('all');
 
   const submitPin = async (pinToSubmit: string, userIdOverride?: string) => {
     if (pinLoading) return;
@@ -207,30 +206,6 @@ export function LoginClient({ operatives }: LoginClientProps) {
 
         {mode === 'pin' ? (
           <div>
-            {/* Team Filter Pills */}
-            <div className="mb-3 flex flex-wrap gap-1.5">
-              {[
-                { id: 'all', label: `All Staff (${operatives.length})` },
-                { id: 'core', label: '⭐ Core Warehouse Team (6)' },
-                { id: 'ccell_wh', label: 'CCELL & Warehouse' },
-                { id: 'sales_ops', label: 'Sales, Ops & People' },
-                { id: 'marketing', label: 'Marketing & Innovations' },
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setTeamFilter(t.id)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
-                    teamFilter === t.id
-                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-black'
-                      : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
             {/* Optional Operative Name Filter */}
             <div className="mb-4">
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
@@ -246,27 +221,11 @@ export function LoginClient({ operatives }: LoginClientProps) {
                 className="w-full h-14 px-4 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-sm focus:outline-none focus:border-emerald-500"
               >
                 <option value="">Any User (Match by 4-Digit PIN)</option>
-                {operatives
-                  .filter((op) => {
-                    if (teamFilter === 'core') return Boolean(op.is_core_warehouse);
-                    if (teamFilter === 'ccell_wh')
-                      return op.team_name === 'CCELL' || op.team_name === 'Warehouse Team';
-                    if (teamFilter === 'sales_ops')
-                      return (
-                        op.team_name === 'Sales' ||
-                        op.team_name === 'Operations' ||
-                        op.team_name === 'People & Operations'
-                      );
-                    if (teamFilter === 'marketing')
-                      return op.team_name === 'Marketing & Innovations';
-                    return true;
-                  })
-                  .map((op) => (
-                    <option key={op.id} value={op.id}>
-                      {op.is_core_warehouse ? '⭐ ' : ''}
-                      {op.display_name} — {op.job_title || op.role} ({op.team_name || 'Warehouse'})
-                    </option>
-                  ))}
+                {operatives.map((op) => (
+                  <option key={op.id} value={op.id}>
+                    {op.display_name} — {op.job_title || op.role}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -347,54 +306,30 @@ export function LoginClient({ operatives }: LoginClientProps) {
               <ArrowRight className="w-5 h-5" />
             </button>
 
-            {/* Quick Seed PIN Helper for Cloud9 Team */}
+            {/* Unified 1-Click PIN Helper for Cloud9 Team */}
             <div className="mt-6 pt-4 border-t border-slate-800 text-xs text-slate-400 space-y-2">
-              <div className="font-bold text-emerald-300 uppercase tracking-wider flex items-center justify-between">
-                <span>⭐ Core Warehouse Team (1-Click PIN):</span>
-                <span className="text-[10px] text-slate-400">Operatives &amp; Supervisors</span>
+              <div className="font-bold text-slate-300 uppercase tracking-wider">
+                1-Click PIN Sign-In:
               </div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto pr-1">
                 {[
-                  { name: 'Erica', role: 'Operative', team: 'Core Warehouse', pin: '1111' },
-                  { name: 'Sam', role: 'Operative', team: 'Core Warehouse', pin: '2222' },
-                  { name: 'Alex', role: 'Operative', team: 'Core Warehouse', pin: '3333' },
-                  { name: 'Mason', role: 'Operative', team: 'Core Warehouse', pin: '1004' },
-                  { name: 'Mark', role: 'Supervisor', team: 'Core Warehouse', pin: '4444' },
-                  { name: 'Edna', role: 'Supervisor', team: 'Core Warehouse', pin: '4445' },
-                ].map((m) => (
-                  <button
-                    key={m.pin}
-                    type="button"
-                    disabled={pinLoading}
-                    onClick={() => {
-                      setPin(m.pin);
-                      submitPin(m.pin);
-                    }}
-                    className="p-2 rounded-lg bg-slate-950 hover:bg-slate-800 border border-emerald-500/30 text-left transition"
-                  >
-                    <div className="font-black text-white text-xs">⭐ {m.name}</div>
-                    <div className="text-[10px] text-slate-400 truncate">{m.role}</div>
-                    <div className="text-emerald-400 font-mono text-[11px] font-bold">PIN: {m.pin}</div>
-                  </button>
-                ))}
-              </div>
-
-              <div className="font-bold text-sky-300 uppercase tracking-wider pt-2">
-                Cross-Department Warehouse Operatives &amp; Leadership:
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-52 overflow-y-auto pr-1">
-                {[
-                  { name: 'Josh', role: 'CEO, Builder & Admin', team: 'Executive', pin: '9999' },
-                  { name: 'Ben', role: 'CCELL Operative', team: 'CCELL', pin: '1005' },
-                  { name: 'Jess', role: 'Warehouse Operative', team: 'Warehouse', pin: '1006' },
-                  { name: 'Sabine', role: 'Warehouse Operative', team: 'Warehouse', pin: '1007' },
-                  { name: 'Dan Igel', role: 'Head of People & Ops', team: 'People & Ops', pin: '1008' },
-                  { name: 'Billy', role: 'Operations', team: 'Operations', pin: '1009' },
-                  { name: 'Mike', role: 'Sales', team: 'Sales', pin: '1010' },
-                  { name: 'Ray', role: 'Sales (WH Support)', team: 'Sales', pin: '1011' },
-                  { name: 'Adrian', role: 'Marketing & Innov.', team: 'Marketing', pin: '1012' },
-                  { name: 'Danny', role: 'Marketing & Innov.', team: 'Marketing', pin: '1013' },
-                  { name: 'Ashton', role: 'Marketing & Innov.', team: 'Marketing', pin: '1014' },
+                  { name: 'Erica', role: 'Core Warehouse Operative', pin: '1111' },
+                  { name: 'Sam', role: 'Core Warehouse Operative', pin: '2222' },
+                  { name: 'Alex', role: 'Core Warehouse Operative', pin: '3333' },
+                  { name: 'Mason', role: 'Core Warehouse Operative', pin: '1004' },
+                  { name: 'Mark', role: 'Supervisor • Core Warehouse', pin: '4444' },
+                  { name: 'Edna', role: 'Supervisor • Core Warehouse', pin: '4445' },
+                  { name: 'Josh', role: 'CEO, Builder & Admin', pin: '9999' },
+                  { name: 'Ben', role: 'CCELL Operative', pin: '1005' },
+                  { name: 'Jess', role: 'Warehouse Operative', pin: '1006' },
+                  { name: 'Sabine', role: 'Warehouse Operative', pin: '1007' },
+                  { name: 'Dan Igel', role: 'Head of People & Operations', pin: '1008' },
+                  { name: 'Billy', role: 'Operations', pin: '1009' },
+                  { name: 'Mike', role: 'Sales', pin: '1010' },
+                  { name: 'Ray', role: 'Sales • Warehouse Operative', pin: '1011' },
+                  { name: 'Adrian', role: 'Marketing & Innovations', pin: '1012' },
+                  { name: 'Danny', role: 'Marketing & Innovations', pin: '1013' },
+                  { name: 'Ashton', role: 'Marketing & Innovations', pin: '1014' },
                 ].map((m) => (
                   <button
                     key={m.pin}
@@ -408,7 +343,7 @@ export function LoginClient({ operatives }: LoginClientProps) {
                   >
                     <div className="font-bold text-white text-xs">{m.name}</div>
                     <div className="text-[10px] text-sky-300 truncate">{m.role}</div>
-                    <div className="text-slate-400 font-mono text-[10px]">PIN: {m.pin}</div>
+                    <div className="text-emerald-400 font-mono text-[10px]">PIN: {m.pin}</div>
                   </button>
                 ))}
               </div>

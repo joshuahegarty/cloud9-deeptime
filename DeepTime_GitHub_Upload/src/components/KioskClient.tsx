@@ -37,7 +37,6 @@ export function KioskClient({ rows }: { rows: KioskRow[] }) {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<'grid' | 'pin'>('grid');
   const [requirePinOnTap, setRequirePinOnTap] = useState(false);
-  const [teamFilter, setTeamFilter] = useState<string>('all');
   const [pinModalUser, setPinModalUser] = useState<UserPublic | null>(null);
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -225,52 +224,8 @@ export function KioskClient({ rows }: { rows: KioskRow[] }) {
       )}
 
       {viewMode === 'grid' ? (
-        <div className="space-y-4">
-          {/* Team Filter Pills */}
-          <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-2xl bg-slate-900/90 border border-slate-800">
-            {[
-              { id: 'all', label: `All Warehouse Operatives (${rows.length})` },
-              {
-                id: 'core',
-                label: `⭐ Core Warehouse Team (${rows.filter((r) => r.operative.is_core_warehouse).length})`,
-              },
-              { id: 'ccell', label: 'CCELL (Ben)' },
-              { id: 'wh', label: 'Warehouse Team (Jess & Sabine)' },
-              { id: 'sales_ops', label: 'Sales, Ops & People (Mike, Ray, Billy, Dan Igel)' },
-              { id: 'marketing', label: 'Marketing & Innovations (Adrian, Danny, Ashton)' },
-            ].map((tf) => (
-              <button
-                key={tf.id}
-                type="button"
-                onClick={() => setTeamFilter(tf.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-black border transition ${
-                  teamFilter === tf.id
-                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow'
-                    : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
-                }`}
-              >
-                {tf.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {rows
-            .filter(({ operative }) => {
-              if (teamFilter === 'core') return Boolean(operative.is_core_warehouse);
-              if (teamFilter === 'ccell') return operative.team_name === 'CCELL';
-              if (teamFilter === 'wh') return operative.team_name === 'Warehouse Team';
-              if (teamFilter === 'sales_ops')
-                return (
-                  operative.team_name === 'Sales' ||
-                  operative.team_name === 'Operations' ||
-                  operative.team_name === 'People & Operations'
-                );
-              if (teamFilter === 'marketing')
-                return operative.team_name === 'Marketing & Innovations';
-              return true;
-            })
-            .map(({ operative, attendance, runningEntry }) => {
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {rows.map(({ operative, attendance, runningEntry }) => {
             const isClockedIn = Boolean(attendance);
             const isRunning = Boolean(runningEntry);
             const isBusy = loadingId === operative.id;
@@ -287,7 +242,7 @@ export function KioskClient({ rows }: { rows: KioskRow[] }) {
                 type="button"
                 disabled={isBusy}
                 onClick={() => handleTapOperative(operative)}
-                className={`group text-left p-6 rounded-3xl border transition-all duration-150 active:scale-[0.99] flex flex-col justify-between min-h-[225px] shadow-xl card-interactive border-l-[3px] ${
+                className={`group text-left p-6 rounded-3xl border transition-all duration-150 active:scale-[0.99] flex flex-col justify-between min-h-[215px] shadow-xl card-interactive border-l-[3px] ${
                   isRunning
                     ? 'bg-gradient-to-b from-cyan-950/35 to-slate-900 border-[#22D3EE]/70 border-l-[#22D3EE] shadow-[0_0_20px_rgba(34,211,238,0.15)]'
                     : isClockedIn
@@ -295,7 +250,7 @@ export function KioskClient({ rows }: { rows: KioskRow[] }) {
                     : 'bg-slate-900 border-slate-800 border-l-[#888888] opacity-85 hover:opacity-100'
                 }`}
               >
-                {/* Card Top: Avatar + Name + Role/Team Badges + Status Pill */}
+                {/* Card Top: Avatar + Name + Role Tag + Status Pill */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3.5">
                     <div
@@ -310,27 +265,15 @@ export function KioskClient({ rows }: { rows: KioskRow[] }) {
                       {getInitials(operative.display_name)}
                     </div>
                     <div>
-                      <div className="flex flex-wrap items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="text-[18px] font-semibold text-[#E8E8E8] tracking-tight group-hover:text-white transition">
                           {operative.display_name}
                         </span>
-                        {operative.is_core_warehouse && (
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-black uppercase tracking-wider">
-                            ⭐ Core WH
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
                         <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-sky-300 text-[10px] font-bold">
                           {operative.job_title || 'Warehouse Operative'}
                         </span>
-                        {operative.team_name && (
-                          <span className="px-2 py-0.5 rounded bg-purple-950/60 border border-purple-500/30 text-purple-300 text-[10px] font-bold">
-                            {operative.team_name}
-                          </span>
-                        )}
                       </div>
-                      <div className="text-[11px] font-normal text-[#888888] mt-1">
+                      <div className="text-[12px] font-normal text-[#888888] mt-0.5">
                         {isClockedIn && attendance
                           ? `Clocked in at ${formatLondonTime(attendance.clock_in)}`
                           : 'Ready to start shift'}
@@ -412,7 +355,6 @@ export function KioskClient({ rows }: { rows: KioskRow[] }) {
               </button>
             );
           })}
-          </div>
         </div>
       ) : (
         <div className="max-w-md mx-auto bg-slate-900 border border-slate-800 rounded-3xl p-7 shadow-2xl">
