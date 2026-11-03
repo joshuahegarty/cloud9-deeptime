@@ -52,40 +52,40 @@ export const PODCAST_CHAPTERS: PodcastChapter[] = [
     title: '1. Platform Mission & 5 Core Pillars',
     subtitle: 'How Josh designed DeepTime to connect 3PL floor activity to billing',
     routeBadge: 'ECOSYSTEM OVERVIEW',
-    durationLabel: '1:13',
+    durationLabel: '1:26',
     startSec: 0,
     keyTakeaways: [
       'Eliminates the 15% ad-hoc labour leakage common with paper timesheets',
       '1-Tap task switching closes prior timers in a single atomic transaction',
-      'Mandatory unit quantity declaration on every general & custom task close',
+      'Smart unit quantity declaration on close',
       'Upward commercial billing rounding (5m, 6m, 10m, 15m, 30m, 60m)',
     ],
   },
   {
     id: 1,
     title: '2. Shared Kiosk (/kiosk) & Personal Timer (/now)',
-    subtitle: 'Touchscreen turnstiles, 3D client reels & bench barcode scanning',
+    subtitle: 'Touchscreen turnstiles, Goods-In sub-types & bench barcode scanning',
     routeBadge: '/KIOSK & /NOW',
-    durationLabel: '1:11',
-    startSec: 72.99,
+    durationLabel: '1:14',
+    startSec: 86.24,
     keyTakeaways: [
       'Colour-coded Kiosk cards: Slate (Off), Sky Blue (Idle), Emerald (Active)',
       'Tapping an off-shift card punches attendance & opens /now?kiosk=1',
-      '3 ways to start: 3D A–Z Client Wheel, Barcode Scan (BC-STD-PICK), Recent Chips',
+      'Standard Order Pick #1 default, Goods-In (Containers/Pallets/Boxes) & Barcode Scan',
       'Touchless auto-return resets the shared tablet for the next operative',
     ],
   },
   {
     id: 2,
-    title: '3. Custom Tasks & Mandatory Quantity Declarations',
-    subtitle: 'Why closing ANY general or custom task requires declaring output',
+    title: '3. Custom Tasks & Smart Quantity Declarations',
+    subtitle: 'How bespoke tasks, Goods-In & Pallet Build & Wrap capture output',
     routeBadge: 'QUANTITY GUARDRAIL',
-    durationLabel: '1:01',
-    startSec: 143.84,
+    durationLabel: '0:55',
+    startSec: 160.16,
     keyTakeaways: [
       '"Task Not Listed" creates client-scoped bespoke tasks on the fly',
-      'Default unit label automatically falls back to "units" if left blank',
-      'Closing via Stop, Clock Out, Task Switch, or /floor ALWAYS prompts for quantity',
+      'Standard Order Pick & Pack close smoothly when Helm WMS tracks orders',
+      'Goods-In, Pallet Build & Wrap, and bespoke tasks prompt for quantity completed',
       'Declared quantity saves onto the closing entry before the new task starts',
     ],
   },
@@ -94,8 +94,8 @@ export const PODCAST_CHAPTERS: PodcastChapter[] = [
     title: '4. Live Supervisor Floor Board (/floor) & Crew Tasks',
     subtitle: 'Real-time bird’s-eye pacing, multi-operative crews & shift close',
     routeBadge: '/FLOOR CONTROL',
-    durationLabel: '0:39',
-    startSec: 204.99,
+    durationLabel: '0:41',
+    startSec: 215.12,
     keyTakeaways: [
       'Live ticking duration counters across all clocked-in warehouse staff',
       'Start Crew Task synchronises multiple operatives under one shared crew_id',
@@ -108,12 +108,12 @@ export const PODCAST_CHAPTERS: PodcastChapter[] = [
     title: '5. Timesheets, Audit Trail & 3-Tier Billing (/entries)',
     subtitle: 'AUTO BILLED, NEEDS BILLED, OUR COST & field-level audit logs',
     routeBadge: '/ENTRIES & AUDIT',
-    durationLabel: '0:54',
-    startSec: 243.68,
+    durationLabel: '0:53',
+    startSec: 256.11,
     keyTakeaways: [
       'AUTO BILLED: routine transactional contract work (e.g. standard pick/pack)',
       'NEEDS BILLED: ad-hoc, rework & custom tasks routed to Billing Review',
-      'OUR COST: requires a mandatory unbilled reason (Error, Training, Goodwill)',
+      'OUR COST: internal housekeeping (Replenishment, Sweeping, Cardboard) & unbilled reason',
       'Database triggers record before/after values for every edited field',
     ],
   },
@@ -123,7 +123,7 @@ export const PODCAST_CHAPTERS: PodcastChapter[] = [
     subtitle: 'Gross margin, utilisation %, league tables & client backing sheets',
     routeBadge: '/REPORTS & BILLING',
     durationLabel: '0:36',
-    startSec: 297.3,
+    startSec: 308.67,
     keyTakeaways: [
       'Compares Raw Stopwatch Hours vs. Upward-Rounded Billable Hours & Margin %',
       'Tracks Operative Utilisation % (productive task time vs. shift attendance)',
@@ -136,8 +136,8 @@ export const PODCAST_CHAPTERS: PodcastChapter[] = [
     title: '7. Setup, Idle Guardrails & Smart Target Governance',
     subtitle: 'Statistical readiness rules & two-point target approval workflow',
     routeBadge: '/SETUP GOVERNANCE',
-    durationLabel: '0:39',
-    startSec: 333.09,
+    durationLabel: '0:43',
+    startSec: 344.56,
     keyTakeaways: [
       '60-min interactive idle check; 75–120m retroactive auto-stop',
       'Customer Baseline Maturity: Learning Phase -> Baseline -> Bossing It',
@@ -151,7 +151,7 @@ export const PODCAST_CHAPTERS: PodcastChapter[] = [
     subtitle: 'IndexedDB dead-zone queueing & instant bug/idea reporting',
     routeBadge: 'OFFLINE & F8 HUB',
     durationLabel: '0:42',
-    startSec: 371.92,
+    startSec: 387.85,
     keyTakeaways: [
       'IndexedDB queues starts, stops & switches in Wi-Fi dead zones',
       'Chronological auto-sync replays queued actions on reconnection',
@@ -177,16 +177,16 @@ export const PODCAST_TURNS: PodcastTurn[] = [
     speaker: 'Josh',
     role: 'Designer & Architect',
     startSec: 14.26,
-    endSec: 35.19,
-    text: 'Thanks! When I designed and architected DeepTime, the goal was simple: in a fast-moving 3PL warehouse, paper timesheets and disconnected spreadsheets lose up to 15% of billable ad-hoc labour. DeepTime bridges physical warehouse operations directly to automated client billing without slowing down operatives.',
+    endSec: 45.75,
+    text: 'Yah mon... I find a lack of warehouse visibility disturbing. When I designed and architected DeepTime, the vision was irie and clear: in a fast-moving 3PL warehouse, paper timesheets lose up to 15% of billable labour. DeepTime brings the full power of the Force to client billing—every little pallet gonna be alright.',
   },
   {
     index: 2,
     chapter: 0,
     speaker: 'Host',
     role: 'Operations Guide',
-    startSec: 35.19,
-    endSec: 41.05,
+    startSec: 45.75,
+    endSec: 51.61,
     text: "Let's break down the five core architectural pillars you built into the system before we tour each screen.",
   },
   {
@@ -194,17 +194,17 @@ export const PODCAST_TURNS: PodcastTurn[] = [
     chapter: 0,
     speaker: 'Josh',
     role: 'Designer & Architect',
-    startSec: 41.05,
-    endSec: 72.99,
-    text: 'First is real-time live visibility across handhelds, pack benches, and shared kiosk tablets. Second is one-tap task switching—starting a new task automatically closes the prior task in one atomic database transaction. Third is mandatory unit quantity declaration whenever any general or custom task closes. Fourth is automated 60-minute idle and shift protection. And fifth is deterministic upward billing rounding—rounding client charges up while keeping exact stopwatch seconds for payroll.',
+    startSec: 51.61,
+    endSec: 86.24,
+    text: 'Search your feelings, mon... First is real-time live visibility across handhelds, pack benches, and shared kiosk tablets. Second is one-tap task switching—one love, one atomic transaction. Third is smart unit quantity declaration on close. Fourth is automated 60-minute idle and 7 PM shift protection. And fifth is upward billing rounding—no unbilled minute left behind in Babylon.',
   },
   {
     index: 4,
     chapter: 1,
     speaker: 'Host',
     role: 'Operations Guide',
-    startSec: 72.99,
-    endSec: 84.49,
+    startSec: 86.24,
+    endSec: 97.74,
     text: "Let's start on the warehouse floor with Module One: the Shared Tablet Kiosk at /kiosk, and the Personal Timer at /now. Walk us through what happens when an operative arrives on shift.",
   },
   {
@@ -212,17 +212,17 @@ export const PODCAST_TURNS: PodcastTurn[] = [
     chapter: 1,
     speaker: 'Josh',
     role: 'Designer & Architect',
-    startSec: 84.49,
-    endSec: 104.96,
-    text: "When an operative walks up to a shared Kiosk tablet, they see colour-coded status cards for the whole team. Slate means clocked off, Sky Blue means clocked in on shift but currently idle, and Emerald Green means a task timer is actively ticking. If they're clocked off, tapping their card punches their attendance clock-in and takes them straight to the task selector.",
+    startSec: 97.74,
+    endSec: 123.01,
+    text: "Yah mon, when an operative steps up to the Kiosk tablet, they see colour-coded status cards for the whole empire. Slate means clocked off, Sky Blue means clocked in and chilling, and Emerald Green means the timer is jammin'. Tap your card, punch in, and feel the rhythm of the warehouse floor.",
   },
   {
     index: 6,
     chapter: 1,
     speaker: 'Host',
     role: 'Operations Guide',
-    startSec: 104.96,
-    endSec: 112.28,
+    startSec: 123.01,
+    endSec: 130.33,
     text: "And once they're on /now, you designed three distinct ways for them to kick off a task depending on where they're working in the warehouse.",
   },
   {
@@ -230,53 +230,53 @@ export const PODCAST_TURNS: PodcastTurn[] = [
     chapter: 1,
     speaker: 'Josh',
     role: 'Designer & Architect',
-    startSec: 112.28,
-    endSec: 143.84,
-    text: 'Exactly. They can spin the 3D alphabetical client wheel—or tap Multi-Client for consolidated warehouse runs—pick a category and task, and tap Start Task. Or at a packing bench, they can tap Scan Barcode and zap a laminated sheet like BC-STD-PICK. Or third, they can tap any badge under Recent Tasks Today to resume a job with a single tap. On a Kiosk tablet, it flashes a green confirmation receipt and automatically resets back to the Kiosk grid for the next person.',
+    startSec: 130.33,
+    endSec: 160.16,
+    text: 'Indeed, young Padawan. Standard Order Pick is ready at the top by default, or for Goods-In they just tap Containers, Pallets, or Boxes. They can also zap a bench barcode like BC-STD-PICK, or tap Recent Tasks Today. On a Kiosk tablet, it flashes green and returns to the grid faster than the Millennium Falcon.',
   },
   {
     index: 8,
     chapter: 2,
     speaker: 'Host',
     role: 'Operations Guide',
-    startSec: 143.84,
-    endSec: 155.74,
-    text: "Now let's talk about one of the most important rules you architected into the task lifecycle: handling custom unlisted tasks, and requiring operatives to declare the quantity completed whenever any task closes.",
+    startSec: 160.16,
+    endSec: 167.43,
+    text: "Now let's talk about handling custom unlisted tasks, and how DeepTime handles quantity declarations when tasks close.",
   },
   {
     index: 9,
     chapter: 2,
     speaker: 'Josh',
     role: 'Designer & Architect',
-    startSec: 155.74,
-    endSec: 175.71,
-    text: "In a real 3PL warehouse, clients constantly ask for one-off bespoke work—emergency relabelling, custom kitting, or damage rework—that isn't on the standard task wheel. Operatives simply tap 'Task Not Listed', type a short task name, pick a unit label or leave it as default units, and start the timer immediately.",
+    startSec: 167.43,
+    endSec: 189.8,
+    text: "Don't worry about a thing, mon. Clients always ask for bespoke work—rework, relabelling, pallet build and wrap, or custom kitting. Operatives just tap Task Not Listed, type a short name, and stir it up immediately.",
   },
   {
     index: 10,
     chapter: 2,
     speaker: 'Host',
     role: 'Operations Guide',
-    startSec: 175.71,
-    endSec: 182.79,
-    text: "And whether it's a general warehouse task or one of those custom tasks, what happens the moment that task is closed or switched?",
+    startSec: 189.8,
+    endSec: 193.35,
+    text: 'And what happens the moment a task is closed or switched?',
   },
   {
     index: 11,
     chapter: 2,
     speaker: 'Josh',
     role: 'Designer & Architect',
-    startSec: 182.79,
-    endSec: 204.99,
-    text: "Every single time a task closes—whether the operative taps Stop, clocks out for the day, switches directly into another general or custom task, or a supervisor stops it remotely from the Floor Board—DeepTime pops up the quantity modal asking: 'How many units completed?' That guarantees we capture completed quantities on both general and custom tasks before the next timer starts.",
+    startSec: 193.35,
+    endSec: 215.12,
+    text: 'The Force guides them, bredren. Standard Order Pick and Pack let you close smoothly without blocking if Helm WMS tracks the orders, while Goods-In, Pallet Build and Wrap, and bespoke tasks pop up the quantity prompt asking how many units you conquered.',
   },
   {
     index: 12,
     chapter: 3,
     speaker: 'Host',
     role: 'Operations Guide',
-    startSec: 204.99,
-    endSec: 213.89,
+    startSec: 215.12,
+    endSec: 224.02,
     text: 'That brings us to Module Two: the Supervisor Live Floor Board at /floor. How did you design this for team leaders managing a busy shift?',
   },
   {
@@ -284,17 +284,17 @@ export const PODCAST_TURNS: PodcastTurn[] = [
     chapter: 3,
     speaker: 'Josh',
     role: 'Designer & Architect',
-    startSec: 213.89,
-    endSec: 234.51,
-    text: "The Floor Board gives supervisors a live bird's-eye grid of every clocked-in operative, their active customer, task, order reference, and a live ticking duration counter. And when a team is unloading a 40-foot container or running a kitting line together, the supervisor just ticks all five operatives, selects the Client and Task, and clicks Start Crew Task.",
+    startSec: 224.02,
+    endSec: 246.94,
+    text: 'From the command deck at /floor, supervisors see every operative, their role tag, active client, and live ticking timer. And when the crew is unloading a 40-foot container together, tick the squad and click Start Crew Task—one love, one crew, one shared timestamp.',
   },
   {
     index: 14,
     chapter: 3,
     speaker: 'Host',
     role: 'Operations Guide',
-    startSec: 234.51,
-    endSec: 243.68,
+    startSec: 246.94,
+    endSec: 256.11,
     text: 'Which synchronises the whole team under a shared crew_id at the exact same start second, alongside remote Stop, Switch, and the nightly Shift-End Close.',
   },
   {
@@ -302,17 +302,17 @@ export const PODCAST_TURNS: PodcastTurn[] = [
     chapter: 4,
     speaker: 'Josh',
     role: 'Designer & Architect',
-    startSec: 243.68,
-    endSec: 258.68,
-    text: 'Moving into Module Three at /entries, this is the master timesheet ledger and commercial classification hub. Every logged entry is classified into one of three commercial billing tiers: Automatically Billed, Needs Billed, or Our Cost.',
+    startSec: 256.11,
+    endSec: 272.69,
+    text: 'Now witness the power of this fully armed timesheet ledger at /entries, mon. Every entry flows into one of three commercial billing tiers: Automatically Billed, Needs Billed, or Our Cost.',
   },
   {
     index: 16,
     chapter: 4,
     speaker: 'Host',
     role: 'Operations Guide',
-    startSec: 258.68,
-    endSec: 263.05,
+    startSec: 272.69,
+    endSec: 277.06,
     text: "Let's clarify those three tiers for supervisors and billing admins.",
   },
   {
@@ -320,17 +320,17 @@ export const PODCAST_TURNS: PodcastTurn[] = [
     chapter: 4,
     speaker: 'Josh',
     role: 'Designer & Architect',
-    startSec: 263.05,
-    endSec: 297.3,
-    text: 'Automatically Billed is for standard contract activities like routine picking and packing covered by transactional rates. Needs Billed is for ad-hoc, hourly, or rework projects—including custom unlisted tasks—that need sign-off in the Billing Hub. And Our Cost is internal warehouse overhead. Crucially, I built Mandatory Unbilled Protection into the database: nobody can downgrade a billable entry to Our Cost without recording a mandatory reason like Warehouse Error, Training, or Goodwill, and every edit is permanently logged in the field-level audit trail.',
+    startSec: 277.06,
+    endSec: 308.67,
+    text: 'Automatically Billed is standard contract picking and packing. Needs Billed is ad-hoc, rework, and custom work routed to the Billing Hub. And Our Cost is internal Cloud9 housekeeping—like replenishment, warehouse sweeping, and cardboard clean-out. Nobody can downgrade a billable job to Our Cost without a mandatory reason, mon. The Dark Side logs every edit in the audit trail.',
   },
   {
     index: 18,
     chapter: 5,
     speaker: 'Host',
     role: 'Operations Guide',
-    startSec: 297.3,
-    endSec: 307.07,
+    startSec: 308.67,
+    endSec: 318.44,
     text: 'Once the entries are verified, commercial managers use Module Four: Performance Reports at /reports and the Client Billing Exporter at /reports/billing.',
   },
   {
@@ -338,17 +338,17 @@ export const PODCAST_TURNS: PodcastTurn[] = [
     chapter: 5,
     speaker: 'Josh',
     role: 'Designer & Architect',
-    startSec: 307.07,
-    endSec: 325.79,
-    text: 'In Performance Reports, you get three analytical views: By Client and Task comparing raw stopwatch hours against upward-rounded billable hours and gross margin percentage; By Operative tracking shift attendance versus productive utilisation percentage; and the Operative League Table benchmarking pick and pack speed against target minutes per unit.',
+    startSec: 318.44,
+    endSec: 337.26,
+    text: 'Yah mon, in Performance Reports you see raw stopwatch hours versus upward-rounded billable hours and gross margin, operative utilisation percentage, and the League Table. Every number is irie and transparent.',
   },
   {
     index: 20,
     chapter: 5,
     speaker: 'Host',
     role: 'Operations Guide',
-    startSec: 325.79,
-    endSec: 333.09,
+    startSec: 337.26,
+    endSec: 344.56,
     text: 'And in the Billing Exporter, one click generates a four-tab Excel backing pack ready to attach straight to a client invoice.',
   },
   {
@@ -356,17 +356,17 @@ export const PODCAST_TURNS: PodcastTurn[] = [
     chapter: 6,
     speaker: 'Josh',
     role: 'Designer & Architect',
-    startSec: 333.09,
-    endSec: 343.48,
-    text: 'In Module Five at /setup, managers configure clients, upward rounding rules, printable bench barcodes, and our Smart Target Variance and Two-Point Approval Engine.',
+    startSec: 344.56,
+    endSec: 358.53,
+    text: 'In Module Five at /setup, managers configure clients, rounding rules, bench barcodes, and our Smart Target Variance and Two-Point Approval Engine.',
   },
   {
     index: 22,
     chapter: 6,
     speaker: 'Host',
     role: 'Operations Guide',
-    startSec: 343.48,
-    endSec: 349.26,
+    startSec: 358.53,
+    endSec: 364.31,
     text: 'Why did you architect a statistical guardrail and Two-Point Approval around task target times?',
   },
   {
@@ -374,17 +374,17 @@ export const PODCAST_TURNS: PodcastTurn[] = [
     chapter: 6,
     speaker: 'Josh',
     role: 'Designer & Architect',
-    startSec: 349.26,
-    endSec: 371.92,
-    text: "Because you never want a single anomalous run to skew warehouse KPIs. DeepTime locks target recommendations until a client's baseline is approved and a task has at least 10 valid runs, 30 total minutes, and 2 distinct operatives. Even then, a supervisor submits a Target Change Request with notes, and an Administrator must approve it before the master target changes.",
+    startSec: 364.31,
+    endSec: 387.85,
+    text: 'Because disturbance in the Force must not skew warehouse KPIs, mon. DeepTime locks target changes until a task has at least 10 valid runs, 30 total minutes, and 2 operatives. A supervisor requests the change, and the Admin approves it. Two-point harmony.',
   },
   {
     index: 24,
     chapter: 7,
     speaker: 'Host',
     role: 'Operations Guide',
-    startSec: 371.92,
-    endSec: 379.89,
+    startSec: 387.85,
+    endSec: 395.82,
     text: "Finally, let's cover Module Six: Wi-Fi dead-zone resilience and the global F8 feedback shortcut you added across every screen.",
   },
   {
@@ -392,22 +392,67 @@ export const PODCAST_TURNS: PodcastTurn[] = [
     chapter: 7,
     speaker: 'Josh',
     role: 'Designer & Architect',
-    startSec: 379.89,
-    endSec: 404.13,
-    text: 'If a tablet loses Wi-Fi deep in the racking aisles, DeepTime queues task starts, stops, and unit declarations locally in IndexedDB and replays them in exact chronological order the moment connectivity returns. And if anyone spots a bug or has an idea for a new feature, pressing F8 on any screen opens the Feedback Hub, captures their screen route automatically, and sends it straight to the staff triage log.',
+    startSec: 395.82,
+    endSec: 419.15,
+    text: 'Even if the Empire jams your Wi-Fi deep in the racking aisles, DeepTime queues every tap in IndexedDB and syncs automatically when signal returns. And pressing F8 on any screen opens the Feedback Hub. One Love, One Warehouse, and may the Force be with Cloud9, mon.',
   },
   {
     index: 26,
     chapter: 7,
     speaker: 'Host',
     role: 'Operations Guide',
-    startSec: 404.13,
-    endSec: 414.47,
+    startSec: 419.15,
+    endSec: 429.49,
     text: 'Thanks Josh! Use the interactive chapter controls, visual mindmaps, and downloadable PDF cheat sheets below whenever your team needs a quick reference on the warehouse floor.',
   },
 ];
 
-const TOTAL_DURATION_SEC = 414.47;
+const TOTAL_DURATION_SEC = 429.49;
+
+function playVaderMarleyRespirator() {
+  if (typeof window === 'undefined') return;
+  try {
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+
+    const createBreath = (startTime: number, duration: number, freq: number) => {
+      const bufferSize = Math.floor(ctx.sampleRate * duration);
+      const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+      }
+      const whiteNoise = ctx.createBufferSource();
+      whiteNoise.buffer = noiseBuffer;
+
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(freq, startTime);
+      filter.Q.setValueAtTime(3.2, startTime);
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.01, startTime);
+      gain.gain.linearRampToValueAtTime(0.22, startTime + duration * 0.3);
+      gain.gain.linearRampToValueAtTime(0.01, startTime + duration);
+
+      whiteNoise.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+
+      whiteNoise.start(startTime);
+      whiteNoise.stop(startTime + duration);
+    };
+
+    createBreath(now, 0.5, 620);
+    createBreath(now + 0.55, 0.55, 440);
+  } catch {
+    // ignore autoplay restrictions
+  }
+}
 
 function formatSec(sec: number): string {
   const s = Math.max(0, Math.floor(sec));
@@ -442,8 +487,11 @@ export function VideoPodcastStudio() {
     );
     if (matched !== -1 && matched !== activeTurnIndex) {
       setActiveTurnIndex(matched);
+      if (isPlaying && !isMuted && PODCAST_TURNS[matched]?.speaker === 'Josh') {
+        playVaderMarleyRespirator();
+      }
     }
-  }, [currentTime, activeTurnIndex]);
+  }, [currentTime, activeTurnIndex, isPlaying, isMuted]);
 
   useEffect(() => {
     if (!useWebSpeechFallback || !isPlaying) {
@@ -464,8 +512,12 @@ export function VideoPodcastStudio() {
     }
 
     window.speechSynthesis.cancel();
+    if (turn.speaker === 'Josh' && !isMuted) {
+      playVaderMarleyRespirator();
+    }
     const utter = new SpeechSynthesisUtterance(turn.text);
-    utter.rate = playbackRate;
+    utter.rate = turn.speaker === 'Josh' ? playbackRate * 0.8 : playbackRate;
+    utter.pitch = turn.speaker === 'Josh' ? 0.25 : 1.0;
     utter.volume = isMuted ? 0 : 1;
 
     const voices = window.speechSynthesis.getVoices();

@@ -543,7 +543,7 @@ export function GuideClient() {
               </thead>
               <tbody className="divide-y divide-slate-800 bg-slate-900/60 print:bg-white print:divide-slate-200">
                 {[
-                  { access: 'Admin', color: 'text-amber-400', name: 'Josh', title: 'Darth Marley • CEO & Dreadlock Sith Lord', pin: '9999', email: 'josh@cloud9fulfilment.co.uk (password123)' },
+                  { access: 'Admin', color: 'text-amber-400', name: 'Josh', title: 'CEO, Builder & Admin', pin: '9999', email: 'josh@cloud9fulfilment.co.uk (password123)' },
                   { access: 'Supervisor', color: 'text-sky-400', name: 'Mark', title: 'Supervisor • Core Warehouse', pin: '4444', email: 'mark@cloud9fulfilment.co.uk (password123)' },
                   { access: 'Supervisor', color: 'text-sky-400', name: 'Edna', title: 'Supervisor • Core Warehouse', pin: '4445', email: 'edna@cloud9fulfilment.co.uk (password123)' },
                   { access: 'Operative', color: 'text-emerald-400', name: 'Erica', title: 'Core Warehouse Operative', pin: '1111', email: 'PIN / Kiosk Tap' },
