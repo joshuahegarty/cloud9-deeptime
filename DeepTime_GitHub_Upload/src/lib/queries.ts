@@ -37,7 +37,7 @@ export async function getSettings(actorUserId: string | null = null): Promise<Ap
 export async function getActiveOperativesAndStaff(): Promise<UserPublic[]> {
   return withDbSession(null, async (tx) => {
     const res = await tx.query<UserPublic>(
-      `select id, display_name, role, job_title, team_name, coalesce(is_core_warehouse, false) as is_core_warehouse, email, coalesce(must_change_pin, false) as must_change_pin, active, created_at::text, updated_at::text
+      `select id, display_name, role, job_title, team_name, coalesce(is_core_warehouse, false) as is_core_warehouse, email, coalesce(must_change_pin, false) as must_change_pin, coalesce(hands_free_voice_enabled, false) as hands_free_voice_enabled, active, created_at::text, updated_at::text
        from users_public
        where active = true
        order by
@@ -580,6 +580,7 @@ export async function getAdminUsers(actorUserId: string): Promise<UserAdmin[]> {
          u.id, u.display_name, u.role, u.job_title, u.team_name,
          coalesce(u.is_core_warehouse, false) as is_core_warehouse,
          coalesce(u.must_change_pin, false) as must_change_pin,
+         coalesce(u.hands_free_voice_enabled, false) as hands_free_voice_enabled,
          u.pin_hash,
          u.hourly_cost::float8 as hourly_cost,
          u.active, u.created_at::text, u.updated_at::text,

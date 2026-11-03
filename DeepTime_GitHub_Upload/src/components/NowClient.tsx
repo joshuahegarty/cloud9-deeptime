@@ -1766,6 +1766,10 @@ export function NowClient({
   };
 
   const isManagerOrAdmin = user.role === 'supervisor' || user.role === 'admin';
+  const isHandsFreeVoiceEnabled =
+    user.hands_free_voice_enabled !== undefined
+      ? Boolean(user.hands_free_voice_enabled)
+      : user.display_name.trim().toLowerCase() === 'josh';
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-12">
@@ -1839,18 +1843,20 @@ export function NowClient({
               >
                 🔑 Change My PIN
               </button>
-              <button
-                type="button"
-                onClick={() => setShowVoicePanel((prev) => !prev)}
-                className={`px-3.5 py-2 rounded-xl border text-xs font-black inline-flex items-center gap-1.5 transition ${
-                  showVoicePanel || isVoiceListening
-                    ? 'bg-[#22D3EE] text-slate-950 border-[#22D3EE] shadow-md shadow-cyan-500/20'
-                    : 'bg-slate-800/90 hover:bg-slate-700 text-cyan-300 border-cyan-500/40'
-                }`}
-              >
-                <Mic className={`w-3.5 h-3.5 ${isVoiceListening ? 'animate-ping' : ''}`} />
-                Hands-Free Voice Mode
-              </button>
+              {isHandsFreeVoiceEnabled && (
+                <button
+                  type="button"
+                  onClick={() => setShowVoicePanel((prev) => !prev)}
+                  className={`px-3.5 py-2 rounded-xl border text-xs font-black inline-flex items-center gap-1.5 transition ${
+                    showVoicePanel || isVoiceListening
+                      ? 'bg-[#22D3EE] text-slate-950 border-[#22D3EE] shadow-md shadow-cyan-500/20'
+                      : 'bg-slate-800/90 hover:bg-slate-700 text-cyan-300 border-cyan-500/40'
+                  }`}
+                >
+                  <Mic className={`w-3.5 h-3.5 ${isVoiceListening ? 'animate-ping' : ''}`} />
+                  Hands-Free Voice Mode
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setShowClockOutConfirmModal(true)}
@@ -1865,7 +1871,7 @@ export function NowClient({
       )}
 
       {/* BACKLOG FEATURE #3: HANDS-FREE VOICE COMMAND MODE PANEL (30:31-31:10) */}
-      {showVoicePanel && (
+      {isHandsFreeVoiceEnabled && showVoicePanel && (
         <div className="p-4 sm:p-5 rounded-3xl bg-slate-900/95 border-2 border-[#22D3EE]/50 shadow-xl space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">

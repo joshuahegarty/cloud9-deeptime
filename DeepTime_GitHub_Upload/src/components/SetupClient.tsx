@@ -4,6 +4,7 @@ import {
   sendBulkTemporaryPinInvitesAction,
   sendTemporaryPinInviteAction,
   toggleTaskTargetAction,
+  toggleUserHandsFreeVoiceAction,
   updateSettingsAction,
   upsertClientAction,
   upsertTaskTypeAction,
@@ -25,6 +26,8 @@ import {
   FolderKanban,
   KeyRound,
   Mail,
+  Mic,
+  MicOff,
   Pencil,
   Plus,
   Settings,
@@ -292,6 +295,24 @@ export function SetupClient({
     }
   };
 
+  const handleToggleUserVoice = async (u: UserAdmin) => {
+    setBusy(true);
+    const nextEnabled = !Boolean(u.hands_free_voice_enabled);
+    const res = await toggleUserHandsFreeVoiceAction({
+      userId: u.id,
+      enabled: nextEnabled,
+    });
+    setBusy(false);
+    if (res.ok) {
+      setBanner(
+        `Hands-Free Voice Mode toggled ${nextEnabled ? 'ON' : 'OFF'} for ${u.display_name}.`
+      );
+      router.refresh();
+    } else {
+      setBanner(res.error || 'Could not toggle Hands-Free Voice Mode.');
+    }
+  };
+
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userModal) return;
@@ -305,6 +326,7 @@ export function SetupClient({
       isCoreWarehouse: Boolean(userModal.is_core_warehouse),
       pin: userModal.newPin !== undefined ? userModal.newPin : userModal.pin_hash,
       mustChangePin: Boolean(userModal.must_change_pin),
+      handsFreeVoiceEnabled: Boolean(userModal.hands_free_voice_enabled),
       hourlyCost:
         userModal.hourly_cost !== null &&
         userModal.hourly_cost !== undefined &&
@@ -745,6 +767,7 @@ export function SetupClient({
                     role: 'operative',
                     newPin: '5555',
                     must_change_pin: true,
+                    hands_free_voice_enabled: false,
                     hourly_cost: 12.5,
                     active: true,
                   })
@@ -763,79 +786,107 @@ export function SetupClient({
             const primaryUsers = sortedAll.filter((u) => isPrimaryStaffMember(u));
             const additionalUsers = sortedAll.filter((u) => !isPrimaryStaffMember(u));
 
-            const renderUserRow = (u: UserAdmin) => (
-              <tr key={u.id} className="hover:bg-slate-800/40">
-                <td className="py-3.5 px-4 font-bold text-white">
-                  <div className="flex items-center gap-2">
-                    <span>{u.display_name}</span>
-                    {u.must_change_pin && (
-                      <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-black uppercase">
-                        Changes PIN on 1st Login
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-xs font-mono text-slate-400">{u.email || '—'}</div>
-                </td>
-                <td className="py-3.5 px-4">
-                  <span
-                    className={`inline-flex items-center px-2.5 py-1 rounded-lg border text-xs font-bold ${getRoleBadgeClass(
-                      u.job_title || u.role
-                    )}`}
-                  >
-                    {u.job_title || u.role}
-                  </span>
-                </td>
-                <td className="py-3.5 px-4 uppercase text-xs font-black text-emerald-400">
-                  {u.role}
-                </td>
-                <td className="py-3.5 px-4 font-mono text-amber-300 font-bold">
-                  {u.pin_hash || '—'}
-                </td>
-                <td className="py-3.5 px-4 font-mono font-bold text-white">
-                  {u.hourly_cost !== null && u.hourly_cost !== undefined
-                    ? `£${Number(u.hourly_cost).toFixed(2)} / hr`
-                    : '—'}
-                </td>
-                <td className="py-3.5 px-4">
-                  <span
-                    className={`px-2 py-0.5 rounded text-xs font-bold ${
-                      u.active
-                        ? 'bg-emerald-500/20 text-emerald-300'
-                        : 'bg-slate-800 text-slate-400'
-                    }`}
-                  >
-                    {u.active ? 'Active' : 'Inactive'}
-                  </span>
-                </td>
-                <td className="py-3.5 px-4 text-right">
-                  <div className="inline-flex items-center gap-1.5">
+            const renderUserRow = (u: UserAdmin) => {
+              const isVoiceOn = Boolean(u.hands_free_voice_enabled);
+              return (
+                <tr key={u.id} className="hover:bg-slate-800/40">
+                  <td className="py-3.5 px-4 font-bold text-white">
+                    <div className="flex items-center gap-2">
+                      <span>{u.display_name}</span>
+                      {u.must_change_pin && (
+                        <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-black uppercase">
+                          Changes PIN on 1st Login
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs font-mono text-slate-400">{u.email || '—'}</div>
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <span
+                      className={`inline-flex items-center px-2.5 py-1 rounded-lg border text-xs font-bold ${getRoleBadgeClass(
+                        u.job_title || u.role
+                      )}`}
+                    >
+                      {u.job_title || u.role}
+                    </span>
+                  </td>
+                  <td className="py-3.5 px-4 uppercase text-xs font-black text-emerald-400">
+                    {u.role}
+                  </td>
+                  <td className="py-3.5 px-4 font-mono text-amber-300 font-bold">
+                    {u.pin_hash || '—'}
+                  </td>
+                  <td className="py-3.5 px-4">
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => handleSendTempPinInvite(u)}
-                      className="px-2.5 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-xs font-bold text-sky-300 inline-flex items-center gap-1"
-                      title="Assign a temporary 4-digit PIN, require PIN change on first login, and open email invite"
+                      onClick={() => handleToggleUserVoice(u)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-black uppercase border inline-flex items-center gap-1.5 transition ${
+                        isVoiceOn
+                          ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 hover:bg-cyan-500/30'
+                          : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'
+                      }`}
+                      title="Click to toggle Hands-Free Voice Command Mode ON or OFF for this user"
                     >
-                      <Mail className="w-3.5 h-3.5" />
-                      Send Temp PIN Invite
+                      {isVoiceOn ? (
+                        <>
+                          <Mic className="w-3.5 h-3.5 text-cyan-300" />
+                          Voice: ON
+                        </>
+                      ) : (
+                        <>
+                          <MicOff className="w-3.5 h-3.5 text-slate-400" />
+                          Voice: OFF
+                        </>
+                      )}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setUserModal({
-                          ...u,
-                          newPin: u.pin_hash || '',
-                        })
-                      }
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 inline-flex items-center gap-1"
+                  </td>
+                  <td className="py-3.5 px-4 font-mono font-bold text-white">
+                    {u.hourly_cost !== null && u.hourly_cost !== undefined
+                      ? `£${Number(u.hourly_cost).toFixed(2)} / hr`
+                      : '—'}
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <span
+                      className={`px-2 py-0.5 rounded text-xs font-bold ${
+                        u.active
+                          ? 'bg-emerald-500/20 text-emerald-300'
+                          : 'bg-slate-800 text-slate-400'
+                      }`}
                     >
-                      <KeyRound className="w-3.5 h-3.5" />
-                      Edit / PIN
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            );
+                      {u.active ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td className="py-3.5 px-4 text-right">
+                    <div className="inline-flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => handleSendTempPinInvite(u)}
+                        className="px-2.5 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-xs font-bold text-sky-300 inline-flex items-center gap-1"
+                        title="Assign a temporary 4-digit PIN, require PIN change on first login, and open email invite"
+                      >
+                        <Mail className="w-3.5 h-3.5" />
+                        Send Temp PIN Invite
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setUserModal({
+                            ...u,
+                            newPin: u.pin_hash || '',
+                          })
+                        }
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 inline-flex items-center gap-1"
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        Edit / PIN
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            };
 
             return (
               <div className="space-y-4">
@@ -852,6 +903,7 @@ export function SetupClient({
                         <th className="py-3 px-4">Role Tag</th>
                         <th className="py-3 px-4">System Access</th>
                         <th className="py-3 px-4">4-Digit PIN</th>
+                        <th className="py-3 px-4">Hands-Free Voice</th>
                         <th className="py-3 px-4">Hourly Cost</th>
                         <th className="py-3 px-4">Status</th>
                         <th className="py-3 px-4 text-right">Manage &amp; Invite</th>
@@ -1769,6 +1821,18 @@ export function SetupClient({
                 className="w-4 h-4 rounded accent-amber-400"
               />
               🔑 Prompt to Set Personal 4-Digit PIN on Next Login
+            </label>
+
+            <label className="flex items-center gap-2 text-sm font-bold text-cyan-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={Boolean(userModal.hands_free_voice_enabled)}
+                onChange={(e) =>
+                  setUserModal({ ...userModal, hands_free_voice_enabled: e.target.checked })
+                }
+                className="w-4 h-4 rounded accent-cyan-400"
+              />
+              🎙️ Enable Hands-Free Voice Command Mode (Default OFF except Josh)
             </label>
 
             <label className="flex items-center gap-2 text-sm font-bold text-slate-200 cursor-pointer">

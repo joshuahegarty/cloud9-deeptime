@@ -764,12 +764,13 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
   where id in ('20000000-0000-0000-0000-000000000202', '20000000-0000-0000-0000-000000000003')
     and project_name is null;
 
-  -- Cloud9 Team Roster, Role Tags (job_title), Team Tags (team_name), Email, Must Change PIN, and Core Warehouse Team flag
+  -- Cloud9 Team Roster, Role Tags (job_title), Team Tags (team_name), Email, Must Change PIN, Hands-Free Voice Mode, and Core Warehouse Team flag
   alter table users add column if not exists job_title text;
   alter table users add column if not exists team_name text;
   alter table users add column if not exists is_core_warehouse boolean not null default false;
   alter table users add column if not exists email text;
   alter table users add column if not exists must_change_pin boolean not null default false;
+  alter table users add column if not exists hands_free_voice_enabled boolean not null default false;
 
   drop view if exists users_public;
   create view users_public as
@@ -782,6 +783,7 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
       coalesce(is_core_warehouse, false) as is_core_warehouse,
       email,
       coalesce(must_change_pin, false) as must_change_pin,
+      coalesce(hands_free_voice_enabled, false) as hands_free_voice_enabled,
       active,
       created_at,
       updated_at
@@ -809,25 +811,25 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
   on conflict (id) do update set
     raw_user_meta_data = excluded.raw_user_meta_data;
 
-  -- Seed / Update Cloud9 Application Users (17 Staff Members with single clean Role Tag & Email)
-  insert into users (id, display_name, role, job_title, team_name, is_core_warehouse, email, pin_hash, hourly_cost, active) values
-    ('00000000-0000-0000-0000-000000000004', 'Mark', 'supervisor', 'Supervisor • Core Warehouse', 'Core Warehouse Team', true, 'mark@cloud9fulfilment.co.uk', '4444', 16.50, true),
-    ('00000000-0000-0000-0000-000000000006', 'Edna', 'supervisor', 'Supervisor • Core Warehouse', 'Core Warehouse Team', true, 'edna@cloud9fulfilment.co.uk', '4445', 16.50, true),
-    ('00000000-0000-0000-0000-000000000001', 'Erica', 'operative', 'Core Warehouse Operative', 'Core Warehouse Team', true, 'erica@cloud9fulfilment.co.uk', '1111', 12.50, true),
-    ('00000000-0000-0000-0000-000000000002', 'Sam', 'operative', 'Core Warehouse Operative', 'Core Warehouse Team', true, 'sam@cloud9fulfilment.co.uk', '2222', 12.80, true),
-    ('00000000-0000-0000-0000-000000000003', 'Alex', 'operative', 'Core Warehouse Operative', 'Core Warehouse Team', true, 'alex@cloud9fulfilment.co.uk', '3333', 13.00, true),
-    ('00000000-0000-0000-0000-000000000007', 'Mason', 'operative', 'Core Warehouse Operative', 'Core Warehouse Team', true, 'mason@cloud9fulfilment.co.uk', '1004', 12.80, true),
-    ('00000000-0000-0000-0000-000000000005', 'Josh', 'admin', 'CEO, Builder & Admin', 'Executive & Leadership', false, 'josh@cloud9fulfilment.co.uk', '9999', 25.00, true),
-    ('00000000-0000-0000-0000-000000000008', 'Ben', 'operative', 'CCELL Operative', 'CCELL', false, 'ben@cloud9fulfilment.co.uk', '1005', 13.00, true),
-    ('00000000-0000-0000-0000-000000000009', 'Jess', 'operative', 'Warehouse Operative', 'Warehouse Team', false, 'jess@cloud9fulfilment.co.uk', '1006', 12.50, true),
-    ('00000000-0000-0000-0000-000000000010', 'Sabine', 'operative', 'Warehouse Operative', 'Warehouse Team', false, 'sabine@cloud9fulfilment.co.uk', '1007', 12.50, true),
-    ('00000000-0000-0000-0000-000000000011', 'Dan Igel', 'operative', 'Head of People & Operations', 'People & Operations', false, 'dan.igel@cloud9fulfilment.co.uk', '1008', 18.00, true),
-    ('00000000-0000-0000-0000-000000000012', 'Billy', 'operative', 'Operations', 'Operations', false, 'billy@cloud9fulfilment.co.uk', '1009', 15.00, true),
-    ('00000000-0000-0000-0000-000000000013', 'Mike', 'operative', 'Sales', 'Sales', false, 'mike@cloud9fulfilment.co.uk', '1010', 15.00, true),
-    ('00000000-0000-0000-0000-000000000014', 'Ray', 'operative', 'Sales • Warehouse Operative', 'Sales', false, 'ray@cloud9fulfilment.co.uk', '1011', 15.00, true),
-    ('00000000-0000-0000-0000-000000000015', 'Adrian', 'operative', 'Marketing & Innovations', 'Marketing & Innovations', false, 'adrian@cloud9fulfilment.co.uk', '1012', 14.50, true),
-    ('00000000-0000-0000-0000-000000000016', 'Danny', 'operative', 'Marketing & Innovations', 'Marketing & Innovations', false, 'danny@cloud9fulfilment.co.uk', '1013', 14.50, true),
-    ('00000000-0000-0000-0000-000000000017', 'Ashton', 'operative', 'Marketing & Innovations', 'Marketing & Innovations', false, 'ashton@cloud9fulfilment.co.uk', '1014', 14.50, true)
+  -- Seed / Update Cloud9 Application Users (17 Staff Members with single clean Role Tag, Email & Hands-Free Voice default ON only for Josh)
+  insert into users (id, display_name, role, job_title, team_name, is_core_warehouse, email, hands_free_voice_enabled, pin_hash, hourly_cost, active) values
+    ('00000000-0000-0000-0000-000000000004', 'Mark', 'supervisor', 'Supervisor • Core Warehouse', 'Core Warehouse Team', true, 'mark@cloud9fulfilment.co.uk', false, '4444', 16.50, true),
+    ('00000000-0000-0000-0000-000000000006', 'Edna', 'supervisor', 'Supervisor • Core Warehouse', 'Core Warehouse Team', true, 'edna@cloud9fulfilment.co.uk', false, '4445', 16.50, true),
+    ('00000000-0000-0000-0000-000000000001', 'Erica', 'operative', 'Core Warehouse Operative', 'Core Warehouse Team', true, 'erica@cloud9fulfilment.co.uk', false, '1111', 12.50, true),
+    ('00000000-0000-0000-0000-000000000002', 'Sam', 'operative', 'Core Warehouse Operative', 'Core Warehouse Team', true, 'sam@cloud9fulfilment.co.uk', false, '2222', 12.80, true),
+    ('00000000-0000-0000-0000-000000000003', 'Alex', 'operative', 'Core Warehouse Operative', 'Core Warehouse Team', true, 'alex@cloud9fulfilment.co.uk', false, '3333', 13.00, true),
+    ('00000000-0000-0000-0000-000000000007', 'Mason', 'operative', 'Core Warehouse Operative', 'Core Warehouse Team', true, 'mason@cloud9fulfilment.co.uk', false, '1004', 12.80, true),
+    ('00000000-0000-0000-0000-000000000005', 'Josh', 'admin', 'CEO, Builder & Admin', 'Executive & Leadership', false, 'josh@cloud9fulfilment.co.uk', true, '9999', 25.00, true),
+    ('00000000-0000-0000-0000-000000000008', 'Ben', 'operative', 'CCELL Operative', 'CCELL', false, 'ben@cloud9fulfilment.co.uk', false, '1005', 13.00, true),
+    ('00000000-0000-0000-0000-000000000009', 'Jess', 'operative', 'Warehouse Operative', 'Warehouse Team', false, 'jess@cloud9fulfilment.co.uk', false, '1006', 12.50, true),
+    ('00000000-0000-0000-0000-000000000010', 'Sabine', 'operative', 'Warehouse Operative', 'Warehouse Team', false, 'sabine@cloud9fulfilment.co.uk', false, '1007', 12.50, true),
+    ('00000000-0000-0000-0000-000000000011', 'Dan Igel', 'operative', 'Head of People & Operations', 'People & Operations', false, 'dan.igel@cloud9fulfilment.co.uk', false, '1008', 18.00, true),
+    ('00000000-0000-0000-0000-000000000012', 'Billy', 'operative', 'Operations', 'Operations', false, 'billy@cloud9fulfilment.co.uk', false, '1009', 15.00, true),
+    ('00000000-0000-0000-0000-000000000013', 'Mike', 'operative', 'Sales', 'Sales', false, 'mike@cloud9fulfilment.co.uk', false, '1010', 15.00, true),
+    ('00000000-0000-0000-0000-000000000014', 'Ray', 'operative', 'Sales • Warehouse Operative', 'Sales', false, 'ray@cloud9fulfilment.co.uk', false, '1011', 15.00, true),
+    ('00000000-0000-0000-0000-000000000015', 'Adrian', 'operative', 'Marketing & Innovations', 'Marketing & Innovations', false, 'adrian@cloud9fulfilment.co.uk', false, '1012', 14.50, true),
+    ('00000000-0000-0000-0000-000000000016', 'Danny', 'operative', 'Marketing & Innovations', 'Marketing & Innovations', false, 'danny@cloud9fulfilment.co.uk', false, '1013', 14.50, true),
+    ('00000000-0000-0000-0000-000000000017', 'Ashton', 'operative', 'Marketing & Innovations', 'Marketing & Innovations', false, 'ashton@cloud9fulfilment.co.uk', false, '1014', 14.50, true)
   on conflict (id) do update set
     display_name = excluded.display_name,
     role = excluded.role,
@@ -837,6 +839,20 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
     email = coalesce(users.email, excluded.email),
     pin_hash = coalesce(users.pin_hash, excluded.pin_hash),
     active = excluded.active;
+
+  -- Ensure Josh defaults to hands_free_voice_enabled = true and everyone else = false on initial migration, while preserving any subsequent admin toggles
+  do $$
+  begin
+    if not exists (select 1 from settings where key = 'hands_free_voice_initialized') then
+      update users
+      set hands_free_voice_enabled = case
+        when id = '00000000-0000-0000-0000-000000000005' or lower(display_name) = 'josh' then true
+        else false
+      end;
+      insert into settings (key, value) values ('hands_free_voice_initialized', 'true'::jsonb)
+      on conflict (key) do nothing;
+    end if;
+  end $$;
 
   -- Seed initial Supervisor-Assigned tasks for Erica so "Assigned to You" tab works out of the box
   insert into assigned_tasks (id, user_id, client_id, task_type_id, order_ref, note, assigned_by, status)

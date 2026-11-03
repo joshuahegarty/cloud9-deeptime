@@ -13,6 +13,7 @@ export interface UserPublic {
   is_core_warehouse?: boolean;
   email?: string | null;
   must_change_pin?: boolean;
+  hands_free_voice_enabled?: boolean;
   active: boolean;
   created_at: string;
   updated_at: string;
