@@ -20,12 +20,11 @@ import {
   KeyRound,
   LogOut,
   Menu,
-  MonitorSmartphone,
   Moon,
+  Palette,
   Receipt,
   RefreshCw,
   Settings,
-  Sun,
   Tablet,
   Unlock,
   Wifi,
@@ -272,13 +271,13 @@ export function AppShell({ user, children }: AppShellProps) {
     checkKioskState();
 
     const savedTheme = window.localStorage.getItem('c9_theme');
-    if (savedTheme === 'light') {
+    if (savedTheme === 'light' || savedTheme === 'c9') {
       setLightMode(true);
-      document.documentElement.classList.add('light');
+      document.documentElement.classList.add('light', 'c9-brand');
       document.documentElement.classList.remove('dark');
     } else {
       setLightMode(false);
-      document.documentElement.classList.remove('light');
+      document.documentElement.classList.remove('light', 'c9-brand');
       document.documentElement.classList.add('dark');
     }
 
@@ -327,14 +326,14 @@ export function AppShell({ user, children }: AppShellProps) {
   }, [isKioskDevice, pathname, router]);
 
   const toggleTheme = () => {
-    const nextLight = !lightMode;
-    setLightMode(nextLight);
-    if (nextLight) {
-      document.documentElement.classList.add('light');
+    const nextC9Brand = !lightMode;
+    setLightMode(nextC9Brand);
+    if (nextC9Brand) {
+      document.documentElement.classList.add('light', 'c9-brand');
       document.documentElement.classList.remove('dark');
-      window.localStorage.setItem('c9_theme', 'light');
+      window.localStorage.setItem('c9_theme', 'c9');
     } else {
-      document.documentElement.classList.remove('light');
+      document.documentElement.classList.remove('light', 'c9-brand');
       document.documentElement.classList.add('dark');
       window.localStorage.setItem('c9_theme', 'dark');
     }
@@ -438,13 +437,6 @@ export function AppShell({ user, children }: AppShellProps) {
                   >
                     Now
                   </NavLink>
-                  <NavLink
-                    href="/kiosk"
-                    active={pathname === '/kiosk'}
-                    icon={<Tablet className="w-3.5 h-3.5" />}
-                  >
-                    Kiosk
-                  </NavLink>
                   {isStaff && (
                     <>
                       <NavLink
@@ -539,17 +531,7 @@ export function AppShell({ user, children }: AppShellProps) {
               </span>
             )}
 
-            {!isKioskDevice ? (
-              <button
-                type="button"
-                onClick={enableKioskMode}
-                className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 whitespace-nowrap transition"
-                title="Lock this tablet into shared floor Kiosk mode"
-              >
-                <MonitorSmartphone className="w-3.5 h-3.5 text-amber-400" />
-                Lock Kiosk
-              </button>
-            ) : (
+            {isKioskDevice && (
               <button
                 type="button"
                 onClick={exitKioskMode}
@@ -577,19 +559,23 @@ export function AppShell({ user, children }: AppShellProps) {
             <button
               type="button"
               onClick={toggleTheme}
-              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold transition"
-              title={lightMode ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+              className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-bold border transition whitespace-nowrap ${
+                lightMode
+                  ? 'bg-[#FE724C] hover:bg-[#F0653E] text-white border-[#FE724C] shadow-md'
+                  : 'bg-slate-800 hover:bg-slate-700 text-cyan-300 border-cyan-500/40'
+              }`}
+              title={lightMode ? 'Switch to Dark Mode' : 'Switch to Cloud9 Branded Colour Mode'}
               aria-label="Toggle theme"
             >
               {lightMode ? (
                 <>
-                  <Moon className="w-4 h-4 text-slate-600" />
-                  <span className="hidden xl:inline">Dark</span>
+                  <Moon className="w-4 h-4 text-white" />
+                  <span className="hidden xl:inline">Dark Mode</span>
                 </>
               ) : (
                 <>
-                  <Sun className="w-4 h-4 text-amber-400" />
-                  <span className="hidden xl:inline">Light</span>
+                  <Palette className="w-4 h-4 text-[#FE724C]" />
+                  <span className="hidden xl:inline">C9 Colour</span>
                 </>
               )}
             </button>
@@ -767,18 +753,6 @@ export function AppShell({ user, children }: AppShellProps) {
                     >
                       <Clock className="w-4 h-4 shrink-0" />
                       <span>Now (Timer)</span>
-                    </Link>
-                    <Link
-                      href="/kiosk"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
-                        pathname === '/kiosk'
-                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
-                          : 'bg-slate-900 text-slate-200 border-slate-800'
-                      }`}
-                    >
-                      <Tablet className="w-4 h-4 shrink-0" />
-                      <span>Kiosk</span>
                     </Link>
                     {isStaff && (
                       <>
@@ -962,13 +936,13 @@ export function AppShell({ user, children }: AppShellProps) {
                 >
                   {lightMode ? (
                     <>
-                      <Moon className="w-3.5 h-3.5" />
+                      <Moon className="w-3.5 h-3.5 text-white" />
                       <span>Dark Mode</span>
                     </>
                   ) : (
                     <>
-                      <Sun className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Light Mode</span>
+                      <Palette className="w-3.5 h-3.5 text-[#FE724C]" />
+                      <span>C9 Colour</span>
                     </>
                   )}
                 </button>
