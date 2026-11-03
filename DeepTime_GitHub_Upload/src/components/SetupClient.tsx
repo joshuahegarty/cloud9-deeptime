@@ -1,18 +1,30 @@
 'use client';
 
 import {
+  sendBulkTemporaryPinInvitesAction,
+  sendTemporaryPinInviteAction,
+  toggleTaskTargetAction,
   updateSettingsAction,
   upsertClientAction,
   upsertTaskTypeAction,
   upsertUserAction,
 } from '@/app/actions';
 import { AppSettings, Client, Role, TaskType, UserAdmin } from '@/lib/types';
-import { getRoleBadgeClass } from '@/lib/roleBadge';
+import {
+  ADDITIONAL_GROUP_ORDER,
+  getAdditionalStaffGroupLabel,
+  getRoleBadgeClass,
+  isPrimaryStaffMember,
+  sortCoreStaffFirst,
+} from '@/lib/roleBadge';
 import {
   Building2,
   Check,
+  ChevronDown,
+  Copy,
   FolderKanban,
   KeyRound,
+  Mail,
   Pencil,
   Plus,
   Settings,
@@ -88,6 +100,31 @@ export function SetupClient({
     (Partial<UserAdmin> & { newPin?: string; newPassword?: string }) | null
   >(null);
 
+  // Temporary PIN Email Invite Modal state
+  const [inviteModal, setInviteModal] = useState<{
+    userId: string;
+    displayName: string;
+    recipientEmail: string;
+    temporaryPin: string;
+    emailSentViaApi: boolean;
+  } | null>(null);
+
+  // Bulk PIN Email Invites Modal state
+  const [bulkInvitesModal, setBulkInvitesModal] = useState<{
+    invites: Array<{
+      userId: string;
+      displayName: string;
+      jobTitle: string;
+      recipientEmail: string;
+      temporaryPin: string;
+    }>;
+    emailsSentViaApi: number;
+  } | null>(null);
+
+  // Collapsible Additional Staff state in Users tab
+  const [showAdditionalUsers, setShowAdditionalUsers] = useState(false);
+  const [expandedUserDepts, setExpandedUserDepts] = useState<Record<string, boolean>>({});
+
   // Settings form state
   const [idlePromptMins, setIdlePromptMins] = useState(settings.idle_prompt_minutes);
   const [idleStopMins, setIdleStopMins] = useState(settings.idle_stop_minutes);
@@ -100,6 +137,82 @@ export function SetupClient({
   const [showTargetsToOperatives, setShowTargetsToOperatives] = useState<boolean>(
     settings.show_targets_to_operatives ?? false
   );
+
+  const handleToggleTaskTarget = async (task: TaskType) => {
+    setBusy(true);
+    const nextEnabled = !(task.target_enabled ?? true);
+    const res = await toggleTaskTargetAction({
+      taskId: task.id,
+      targetEnabled: nextEnabled,
+    });
+    setBusy(false);
+    if (res.ok) {
+      setBanner(
+        `Target toggled ${nextEnabled ? 'ON' : 'OFF'} for "${task.name}" (${task.code}).`
+      );
+      router.refresh();
+    } else {
+      setBanner(res.error || 'Could not toggle target.');
+    }
+  };
+
+  const handleToggleTaskUnitPrompt = async (task: TaskType) => {
+    setBusy(true);
+    const nextPrompt = !(task.require_units_on_close ?? true);
+    const res = await toggleTaskTargetAction({
+      taskId: task.id,
+      requireUnitsOnClose: nextPrompt,
+    });
+    setBusy(false);
+    if (res.ok) {
+      setBanner(
+        `Unit prompt on stop toggled ${nextPrompt ? 'ON' : 'OFF'} for "${task.name}".`
+      );
+      router.refresh();
+    } else {
+      setBanner(res.error || 'Could not toggle unit prompt.');
+    }
+  };
+
+  const handleSendTempPinInvite = async (u: UserAdmin, customTempPin?: string) => {
+    setBusy(true);
+    const res = await sendTemporaryPinInviteAction({
+      userId: u.id,
+      email: u.email,
+      temporaryPin: customTempPin || null,
+    });
+    setBusy(false);
+    if (!res.ok) {
+      setBanner(res.error || 'Failed to generate temporary PIN invite.');
+      return;
+    }
+    setInviteModal({
+      userId: u.id,
+      displayName: res.displayName || u.display_name,
+      recipientEmail: res.recipientEmail || u.email || '',
+      temporaryPin: res.temporaryPin || '0000',
+      emailSentViaApi: Boolean(res.emailSentViaApi),
+    });
+    router.refresh();
+  };
+
+  const handleBulkSendPinInvites = async (regenerateRandomPins: boolean) => {
+    setBusy(true);
+    const res = await sendBulkTemporaryPinInvitesAction({ regenerateRandomPins });
+    setBusy(false);
+    if (!res.ok || !res.invites) {
+      setBanner(res.error || 'Failed to prepare bulk PIN invites.');
+      return;
+    }
+    setBulkInvitesModal({
+      invites: res.invites,
+      emailsSentViaApi: res.emailsSentViaApi ?? 0,
+    });
+    setBanner(
+      `Prepared temporary PIN invites for ${res.invites.length} staff members (all set to prompt for a personal PIN on 1st login).`
+    );
+    router.refresh();
+  };
 
   const handleSaveClient = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,6 +266,7 @@ export function SetupClient({
         String(taskModal.standard_minutes) !== ''
           ? Number(taskModal.standard_minutes)
           : null,
+      targetEnabled: taskModal.target_enabled ?? true,
       unitLabel: taskModal.unit_label || 'units',
       requireUnitsOnClose: taskModal.require_units_on_close ?? true,
       billable: taskModal.billable ?? true,
@@ -190,6 +304,7 @@ export function SetupClient({
       teamName: userModal.team_name || null,
       isCoreWarehouse: Boolean(userModal.is_core_warehouse),
       pin: userModal.newPin !== undefined ? userModal.newPin : userModal.pin_hash,
+      mustChangePin: Boolean(userModal.must_change_pin),
       hourlyCost:
         userModal.hourly_cost !== null &&
         userModal.hourly_cost !== undefined &&
@@ -486,76 +601,113 @@ export function SetupClient({
                   <th className="py-3 px-3">Category</th>
                   <th className="py-3 px-3">Code</th>
                   <th className="py-3 px-3">Task Name</th>
+                  <th className="py-3 px-3">Target Toggle &amp; Standard</th>
+                  <th className="py-3 px-3">Unit Input on Stop</th>
                   <th className="py-3 px-3">Billing Rounding</th>
-                  <th className="py-3 px-3">Standard</th>
-                  <th className="py-3 px-3">Unit Label</th>
                   <th className="py-3 px-3">Rate (£/hr)</th>
-                  <th className="py-3 px-3">Barcode</th>
                   <th className="py-3 px-3">Billable</th>
                   <th className="py-3 px-3 text-right">Edit</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
-                {filteredTasks.map((t) => (
-                  <tr key={t.id} className="hover:bg-slate-800/40">
-                    <td className="py-3 px-3">
-                      {t.is_standard ? (
-                        <span className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 font-mono text-xs font-black">
-                          STANDARD (ALL)
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono text-xs font-black">
-                          {t.client_code}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-3 text-xs font-semibold text-slate-300">
-                      {t.category || 'Fulfilment'}
-                    </td>
-                    <td className="py-3 px-3 font-mono text-xs text-slate-300">
-                      {t.code}
-                    </td>
-                    <td className="py-3 px-3 font-bold text-white">{t.name}</td>
-                    <td className="py-3 px-3 text-xs">
-                      {t.rounding_minutes === null || t.rounding_minutes === undefined ? (
-                        <span className="text-slate-400">Customer Default</span>
-                      ) : t.rounding_minutes === 0 ? (
-                        <span className="px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 font-bold">
-                          Override: Exact
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">
-                          Override: Up {t.rounding_minutes}m
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-3 text-slate-300">
-                      {t.standard_minutes
-                        ? `${t.standard_minutes}m / ${t.unit_label || 'entry'}`
-                        : '—'}
-                    </td>
-                    <td className="py-3 px-3 text-slate-300">{t.unit_label || '—'}</td>
-                    <td className="py-3 px-3 font-mono text-slate-300">
-                      {t.rate ? `£${Number(t.rate).toFixed(2)}` : '—'}
-                    </td>
-                    <td className="py-3 px-3 font-mono text-xs text-amber-300">
-                      {t.barcode || '—'}
-                    </td>
-                    <td className="py-3 px-3 text-slate-300">
-                      {t.billable ? 'Yes' : 'No'}
-                    </td>
-                    <td className="py-3 px-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => setTaskModal(t)}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 inline-flex items-center gap-1"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                        Edit
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {filteredTasks.map((t) => {
+                  const isTargetOn = t.target_enabled !== false;
+                  const isUnitPromptOn = t.require_units_on_close !== false;
+                  return (
+                    <tr key={t.id} className="hover:bg-slate-800/40">
+                      <td className="py-3 px-3">
+                        {t.is_standard ? (
+                          <span className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 font-mono text-xs font-black">
+                            STANDARD (ALL)
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono text-xs font-black">
+                            {t.client_code}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 text-xs font-semibold text-slate-300">
+                        {t.category || 'Fulfilment'}
+                      </td>
+                      <td className="py-3 px-3 font-mono text-xs text-slate-300">
+                        {t.code}
+                      </td>
+                      <td className="py-3 px-3 font-bold text-white">{t.name}</td>
+                      <td className="py-3 px-3">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={busy || !isAdmin}
+                            onClick={() => handleToggleTaskTarget(t)}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-black uppercase border transition ${
+                              isTargetOn
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 hover:bg-emerald-500/30'
+                                : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'
+                            }`}
+                            title="Click to toggle Target ON or OFF for this task type"
+                          >
+                            {isTargetOn ? 'Target: ON' : 'Target: OFF'}
+                          </button>
+                          <span
+                            className={`text-xs font-mono ${
+                              isTargetOn ? 'text-slate-200 font-bold' : 'text-slate-500 line-through'
+                            }`}
+                          >
+                            {t.standard_minutes
+                              ? `${t.standard_minutes}m / ${t.unit_label || 'unit'}`
+                              : 'No std set'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-3">
+                        <button
+                          type="button"
+                          disabled={busy || !isAdmin}
+                          onClick={() => handleToggleTaskUnitPrompt(t)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+                            isUnitPromptOn
+                              ? 'bg-sky-500/15 text-sky-300 border-sky-500/40 hover:bg-sky-500/25'
+                              : 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
+                          }`}
+                          title="Toggle whether staff are asked to input production units when stopping this task"
+                        >
+                          {isUnitPromptOn
+                            ? `Prompts (${t.unit_label || 'units'})`
+                            : 'Off (Helm Sync)'}
+                        </button>
+                      </td>
+                      <td className="py-3 px-3 text-xs">
+                        {t.rounding_minutes === null || t.rounding_minutes === undefined ? (
+                          <span className="text-slate-400">Customer Default</span>
+                        ) : t.rounding_minutes === 0 ? (
+                          <span className="px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 font-bold">
+                            Override: Exact
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">
+                            Override: Up {t.rounding_minutes}m
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 font-mono text-slate-300">
+                        {t.rate ? `£${Number(t.rate).toFixed(2)}` : '—'}
+                      </td>
+                      <td className="py-3 px-3 text-slate-300">
+                        {t.billable ? 'Yes' : 'No'}
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setTaskModal(t)}
+                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 inline-flex items-center gap-1"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -564,105 +716,229 @@ export function SetupClient({
 
       {/* 3. USERS & HOURLY COSTS SECTION (Admin Only) */}
       {section === 'users' && isAdmin && (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
-          <div className="flex items-center justify-between">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-black text-white">
-                Users, Roles, PINs &amp; Hourly Costs
+                Users, Roles, PINs, Email Invites &amp; Hourly Costs
               </h2>
               <p className="text-xs text-slate-400">
-                Hourly cost is protected by Postgres RLS and excluded from non-admin views.
+                Mark &amp; Edna appear first, followed by Core Warehouse Operatives. Use <strong>Send Temp PIN Invite</strong> or <strong>Email PIN Invites to All Staff</strong> to send temporary PINs that prompt each person to set their own personal PIN on first login.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() =>
-                setUserModal({
-                  display_name: '',
-                  role: 'operative',
-                  newPin: '5555',
-                  hourly_cost: 12.5,
-                  active: true,
-                })
-              }
-              className="btn-glove px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black flex items-center gap-1.5"
-            >
-              <Plus className="w-4 h-4" />
-              New User
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => handleBulkSendPinInvites(false)}
+                className="btn-glove px-3.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-sky-300 text-xs font-black flex items-center gap-1.5"
+                title="Flag all staff to set their personal PIN on next login and generate email invites for the whole team"
+              >
+                <Mail className="w-4 h-4" />
+                Email PIN Invites to All Staff
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setUserModal({
+                    display_name: '',
+                    role: 'operative',
+                    newPin: '5555',
+                    must_change_pin: true,
+                    hourly_cost: 12.5,
+                    active: true,
+                  })
+                }
+                className="btn-glove px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" />
+                New User
+              </button>
+            </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-slate-800 text-xs font-bold uppercase text-slate-400">
-                  <th className="py-3 px-4">Team Member</th>
-                  <th className="py-3 px-4">Role Tag</th>
-                  <th className="py-3 px-4">System Access</th>
-                  <th className="py-3 px-4">4-Digit PIN</th>
-                  <th className="py-3 px-4">Hourly Cost (Admin Only)</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-right">Manage</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800">
-                {users.map((u) => (
-                  <tr key={u.id} className="hover:bg-slate-800/40">
-                    <td className="py-3.5 px-4 font-bold text-white">
-                      <div>{u.display_name}</div>
-                      <div className="text-xs font-mono text-slate-400">{u.email}</div>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-1 rounded-lg border text-xs font-bold ${getRoleBadgeClass(
-                          u.job_title || u.role
-                        )}`}
-                      >
-                        {u.job_title || u.role}
+          {/* Primary Staff Table: Mark & Edna first, then Core Warehouse Operatives */}
+          {(() => {
+            const sortedAll = sortCoreStaffFirst(users);
+            const primaryUsers = sortedAll.filter((u) => isPrimaryStaffMember(u));
+            const additionalUsers = sortedAll.filter((u) => !isPrimaryStaffMember(u));
+
+            const renderUserRow = (u: UserAdmin) => (
+              <tr key={u.id} className="hover:bg-slate-800/40">
+                <td className="py-3.5 px-4 font-bold text-white">
+                  <div className="flex items-center gap-2">
+                    <span>{u.display_name}</span>
+                    {u.must_change_pin && (
+                      <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-black uppercase">
+                        Changes PIN on 1st Login
                       </span>
-                    </td>
-                    <td className="py-3.5 px-4 uppercase text-xs font-black text-emerald-400">
-                      {u.role}
-                    </td>
-                    <td className="py-3.5 px-4 font-mono text-amber-300 font-bold">
-                      {u.pin_hash || '—'}
-                    </td>
-                    <td className="py-3.5 px-4 font-mono font-bold text-white">
-                      {u.hourly_cost !== null && u.hourly_cost !== undefined
-                        ? `£${Number(u.hourly_cost).toFixed(2)} / hr`
-                        : '—'}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span
-                        className={`px-2 py-0.5 rounded text-xs font-bold ${
-                          u.active
-                            ? 'bg-emerald-500/20 text-emerald-300'
-                            : 'bg-slate-800 text-slate-400'
-                        }`}
-                      >
-                        {u.active ? 'Active' : 'Inactive'}
+                    )}
+                  </div>
+                  <div className="text-xs font-mono text-slate-400">{u.email || '—'}</div>
+                </td>
+                <td className="py-3.5 px-4">
+                  <span
+                    className={`inline-flex items-center px-2.5 py-1 rounded-lg border text-xs font-bold ${getRoleBadgeClass(
+                      u.job_title || u.role
+                    )}`}
+                  >
+                    {u.job_title || u.role}
+                  </span>
+                </td>
+                <td className="py-3.5 px-4 uppercase text-xs font-black text-emerald-400">
+                  {u.role}
+                </td>
+                <td className="py-3.5 px-4 font-mono text-amber-300 font-bold">
+                  {u.pin_hash || '—'}
+                </td>
+                <td className="py-3.5 px-4 font-mono font-bold text-white">
+                  {u.hourly_cost !== null && u.hourly_cost !== undefined
+                    ? `£${Number(u.hourly_cost).toFixed(2)} / hr`
+                    : '—'}
+                </td>
+                <td className="py-3.5 px-4">
+                  <span
+                    className={`px-2 py-0.5 rounded text-xs font-bold ${
+                      u.active
+                        ? 'bg-emerald-500/20 text-emerald-300'
+                        : 'bg-slate-800 text-slate-400'
+                    }`}
+                  >
+                    {u.active ? 'Active' : 'Inactive'}
+                  </span>
+                </td>
+                <td className="py-3.5 px-4 text-right">
+                  <div className="inline-flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => handleSendTempPinInvite(u)}
+                      className="px-2.5 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-xs font-bold text-sky-300 inline-flex items-center gap-1"
+                      title="Assign a temporary 4-digit PIN, require PIN change on first login, and open email invite"
+                    >
+                      <Mail className="w-3.5 h-3.5" />
+                      Send Temp PIN Invite
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setUserModal({
+                          ...u,
+                          newPin: u.pin_hash || '',
+                        })
+                      }
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 inline-flex items-center gap-1"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                      Edit / PIN
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+
+            return (
+              <div className="space-y-4">
+                <div className="overflow-x-auto rounded-xl border border-slate-800">
+                  <div className="px-4 py-2.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+                    <span className="text-xs font-black uppercase tracking-wider text-emerald-400">
+                      ⭐ Supervisors (Mark &amp; Edna) &amp; Core Warehouse Operatives ({primaryUsers.length})
+                    </span>
+                  </div>
+                  <table className="w-full text-left border-collapse text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-xs font-bold uppercase text-slate-400 bg-slate-950/40">
+                        <th className="py-3 px-4">Team Member</th>
+                        <th className="py-3 px-4">Role Tag</th>
+                        <th className="py-3 px-4">System Access</th>
+                        <th className="py-3 px-4">4-Digit PIN</th>
+                        <th className="py-3 px-4">Hourly Cost</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4 text-right">Manage &amp; Invite</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {primaryUsers.map(renderUserRow)}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Collapsible Additional Staff Members Section Grouped by Department / Job Title */}
+                {additionalUsers.length > 0 && (
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950/50 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setShowAdditionalUsers((prev) => !prev)}
+                      className="w-full px-4 py-3.5 flex items-center justify-between text-left hover:bg-slate-900/80 transition"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Users className="w-4 h-4 text-sky-400" />
+                        <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-200">
+                          Additional Staff Members — Grouped by Department / Role ({additionalUsers.length})
+                        </span>
+                      </div>
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-sky-400">
+                        {showAdditionalUsers ? 'Collapse' : 'Expand'}
+                        <ChevronDown
+                          className={`w-4 h-4 transition-transform ${
+                            showAdditionalUsers ? 'rotate-180' : ''
+                          }`}
+                        />
                       </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setUserModal({
-                            ...u,
-                            newPin: u.pin_hash || '',
-                          })
-                        }
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 inline-flex items-center gap-1"
-                      >
-                        <KeyRound className="w-3.5 h-3.5" />
-                        Edit / Reset PIN
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </button>
+
+                    {showAdditionalUsers && (
+                      <div className="p-4 pt-2 space-y-3 border-t border-slate-800">
+                        {ADDITIONAL_GROUP_ORDER.map((deptLabel) => {
+                          const deptMembers = additionalUsers.filter(
+                            (u) => getAdditionalStaffGroupLabel(u) === deptLabel
+                          );
+                          if (deptMembers.length === 0) return null;
+                          const isDeptOpen = expandedUserDepts[deptLabel] ?? true;
+
+                          return (
+                            <div
+                              key={deptLabel}
+                              className="rounded-xl border border-slate-800 bg-slate-900/70 overflow-hidden"
+                            >
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedUserDepts((prev) => ({
+                                    ...prev,
+                                    [deptLabel]: !isDeptOpen,
+                                  }))
+                                }
+                                className="w-full px-4 py-2.5 bg-slate-950/80 flex items-center justify-between text-left hover:bg-slate-900 transition"
+                              >
+                                <span className="text-xs font-black uppercase tracking-wider text-amber-300">
+                                  {deptLabel} ({deptMembers.length})
+                                </span>
+                                <ChevronDown
+                                  className={`w-4 h-4 text-slate-400 transition-transform ${
+                                    isDeptOpen ? 'rotate-180' : ''
+                                  }`}
+                                />
+                              </button>
+                              {isDeptOpen && (
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-left border-collapse text-sm">
+                                    <tbody className="divide-y divide-slate-800">
+                                      {deptMembers.map(renderUserRow)}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -1090,24 +1366,27 @@ export function SetupClient({
                   <label className="block text-xs font-bold uppercase text-slate-400">
                     Target (Mins / Unit)
                   </label>
-                  <label className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-300 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={taskModal.standard_minutes === null}
-                      onChange={(e) =>
-                        setTaskModal({
-                          ...taskModal,
-                          standard_minutes: e.target.checked ? null : 1.0,
-                        })
-                      }
-                      className="w-3.5 h-3.5 rounded accent-amber-400"
-                    />
-                    Target N/A
-                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setTaskModal({
+                        ...taskModal,
+                        target_enabled: !(taskModal.target_enabled ?? true),
+                      })
+                    }
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase border transition ${
+                      taskModal.target_enabled ?? true
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    {taskModal.target_enabled ?? true ? 'Target: ON' : 'Target: OFF'}
+                  </button>
                 </div>
                 <input
                   type="number"
                   step="0.01"
+                  disabled={taskModal.target_enabled === false}
                   value={taskModal.standard_minutes ?? ''}
                   onChange={(e) =>
                     setTaskModal({
@@ -1116,8 +1395,10 @@ export function SetupClient({
                         e.target.value === '' ? null : Number(e.target.value),
                     })
                   }
-                  placeholder="e.g. 1.50"
-                  className="w-full h-11 px-3 rounded-xl bg-slate-950 border border-slate-700 text-white"
+                  placeholder={
+                    taskModal.target_enabled === false ? 'Target toggled OFF' : 'e.g. 1.50'
+                  }
+                  className="w-full h-11 px-3 rounded-xl bg-slate-950 border border-slate-700 text-white disabled:opacity-50"
                 />
               </div>
 
@@ -1447,37 +1728,48 @@ export function SetupClient({
               />
             </div>
 
-            {(userModal.role === 'supervisor' || userModal.role === 'admin') && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-400 mb-1">
-                    Staff Email
-                  </label>
-                  <input
-                    type="email"
-                    value={userModal.email || ''}
-                    onChange={(e) =>
-                      setUserModal({ ...userModal, email: e.target.value })
-                    }
-                    className="w-full h-11 px-3 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-400 mb-1">
-                    New Password (Optional)
-                  </label>
-                  <input
-                    type="password"
-                    value={userModal.newPassword || ''}
-                    onChange={(e) =>
-                      setUserModal({ ...userModal, newPassword: e.target.value })
-                    }
-                    placeholder="Leave blank to keep"
-                    className="w-full h-11 px-3 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm"
-                  />
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">
+                  Staff Email (For PIN Invites)
+                </label>
+                <input
+                  type="email"
+                  value={userModal.email || ''}
+                  onChange={(e) =>
+                    setUserModal({ ...userModal, email: e.target.value })
+                  }
+                  placeholder="name@cloud9fulfilment.co.uk"
+                  className="w-full h-11 px-3 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm"
+                />
               </div>
-            )}
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">
+                  New Password (Optional)
+                </label>
+                <input
+                  type="password"
+                  value={userModal.newPassword || ''}
+                  onChange={(e) =>
+                    setUserModal({ ...userModal, newPassword: e.target.value })
+                  }
+                  placeholder="Leave blank to keep"
+                  className="w-full h-11 px-3 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm"
+                />
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm font-bold text-amber-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={Boolean(userModal.must_change_pin)}
+                onChange={(e) =>
+                  setUserModal({ ...userModal, must_change_pin: e.target.checked })
+                }
+                className="w-4 h-4 rounded accent-amber-400"
+              />
+              🔑 Prompt to Set Personal 4-Digit PIN on Next Login
+            </label>
 
             <label className="flex items-center gap-2 text-sm font-bold text-slate-200 cursor-pointer">
               <input
@@ -1508,6 +1800,246 @@ export function SetupClient({
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* TEMPORARY PIN EMAIL INVITE MODAL */}
+      {inviteModal && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-slate-900 border border-sky-500/50 rounded-2xl p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="w-9 h-9 rounded-xl bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-300">
+                  <Mail className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="text-lg font-black text-white">
+                    Temporary PIN Invite Ready — {inviteModal.displayName}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {inviteModal.recipientEmail} • Prompts to set personal PIN on 1st login
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInviteModal(null)}
+                className="p-2 rounded-lg bg-slate-800 text-slate-300 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-950 border-2 border-dashed border-sky-500/50 text-center space-y-2">
+              <div className="text-[11px] font-black uppercase tracking-widest text-sky-400">
+                Assigned Temporary 4-Digit PIN (Editable)
+              </div>
+              <div className="flex items-center justify-center gap-2">
+                <input
+                  type="text"
+                  maxLength={4}
+                  value={inviteModal.temporaryPin}
+                  onChange={(e) =>
+                    setInviteModal({
+                      ...inviteModal,
+                      temporaryPin: e.target.value.replace(/\D/g, '').slice(0, 4),
+                    })
+                  }
+                  className="w-36 h-12 rounded-xl bg-slate-900 border border-sky-500/60 text-3xl font-black font-mono tracking-[0.2em] text-white text-center focus:outline-none focus:border-sky-400"
+                />
+                <button
+                  type="button"
+                  disabled={busy || inviteModal.temporaryPin.length !== 4}
+                  onClick={async () => {
+                    const res = await sendTemporaryPinInviteAction({
+                      userId: inviteModal.userId,
+                      email: inviteModal.recipientEmail,
+                      temporaryPin: inviteModal.temporaryPin,
+                    });
+                    if (res.ok) {
+                      setBanner(
+                        `Saved temporary PIN ${inviteModal.temporaryPin} for ${inviteModal.displayName} (prompts to set personal PIN on 1st login).`
+                      );
+                      router.refresh();
+                    }
+                  }}
+                  className="h-12 px-3 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-xs font-black text-sky-300"
+                >
+                  Save PIN
+                </button>
+              </div>
+              <div className="text-xs text-amber-300 font-semibold">
+                When {inviteModal.displayName} logs in with this PIN, DeepTime will immediately ask them to choose their own personal 4-digit PIN.
+              </div>
+            </div>
+
+            {inviteModal.emailSentViaApi && (
+              <div className="p-2.5 rounded-xl bg-emerald-950/70 border border-emerald-700 text-xs font-bold text-emerald-300">
+                ✓ Invite email automatically dispatched via Resend API to {inviteModal.recipientEmail}.
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const appUrl =
+                    typeof window !== 'undefined'
+                      ? window.location.origin
+                      : 'https://cloud9-deeptime-production.up.railway.app';
+                  const body = `Hi ${inviteModal.displayName},\n\nHere is your temporary 4-digit PIN to sign in to Cloud9 DeepTime:\n\nTemporary PIN: ${inviteModal.temporaryPin}\nSign-In Link: ${appUrl}/login\n\nWhen you sign in for the first time, it will ask you to choose your own personal 4-digit PIN.`;
+                  navigator.clipboard?.writeText(body);
+                  setBanner(`Copied temporary PIN invite for ${inviteModal.displayName} to clipboard.`);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 inline-flex items-center gap-1.5"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                Copy Invite Text
+              </button>
+              <a
+                href={`mailto:${encodeURIComponent(inviteModal.recipientEmail)}?subject=${encodeURIComponent(
+                  'Your Cloud9 DeepTime Sign-In & Temporary 4-Digit PIN'
+                )}&body=${encodeURIComponent(
+                  `Hi ${inviteModal.displayName},\n\nHere is your temporary 4-digit PIN to sign in to Cloud9 DeepTime:\n\nTemporary 4-Digit PIN: ${inviteModal.temporaryPin}\nSign-In Link: https://cloud9-deeptime-production.up.railway.app/login\n\nWhen you log in for the first time, DeepTime will ask you to set your own personal 4-digit PIN.\n\nThanks,\nCloud9 Fulfilment`
+                )}`}
+                className="px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-black inline-flex items-center gap-1.5"
+              >
+                <Mail className="w-3.5 h-3.5" />
+                Open Email Draft
+              </a>
+              <button
+                type="button"
+                onClick={() => setInviteModal(null)}
+                className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BULK STAFF PIN EMAIL INVITES MODAL */}
+      {bulkInvitesModal && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-slate-900 border border-sky-500/50 rounded-2xl p-6 space-y-4 shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <span className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-300">
+                  <Mail className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="text-lg font-black text-white">
+                    Team-Wide Temporary PIN Email Invites ({bulkInvitesModal.invites.length} Staff)
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Every staff member below is now flagged to choose their own personal 4-digit PIN the first time they log in.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBulkInvitesModal(null)}
+                className="p-2 rounded-lg bg-slate-800 text-slate-300 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {bulkInvitesModal.emailsSentViaApi > 0 && (
+              <div className="p-2.5 rounded-xl bg-emerald-950/70 border border-emerald-700 text-xs font-bold text-emerald-300">
+                ✓ Automatically dispatched {bulkInvitesModal.emailsSentViaApi} invite email(s) via Resend API.
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950 p-3 rounded-xl border border-slate-800">
+              <span className="text-xs text-slate-300 font-semibold">
+                Want fresh random 4-digit temporary PINs for everyone?
+              </span>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => handleBulkSendPinInvites(true)}
+                className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-xs font-black text-amber-300"
+              >
+                Regenerate Random Temporary PINs for All
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 border border-slate-800 rounded-xl">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-950 border-b border-slate-800 text-slate-400 font-bold uppercase">
+                    <th className="py-2.5 px-3">Staff Member</th>
+                    <th className="py-2.5 px-3">Role / Department</th>
+                    <th className="py-2.5 px-3">Email</th>
+                    <th className="py-2.5 px-3">Temp PIN</th>
+                    <th className="py-2.5 px-3 text-right">Email Draft</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {bulkInvitesModal.invites.map((item) => (
+                    <tr key={item.userId} className="hover:bg-slate-800/40">
+                      <td className="py-2.5 px-3 font-bold text-white">{item.displayName}</td>
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded border text-[10px] font-bold ${getRoleBadgeClass(
+                            item.jobTitle
+                          )}`}
+                        >
+                          {item.jobTitle}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-slate-300">{item.recipientEmail}</td>
+                      <td className="py-2.5 px-3 font-mono font-black text-amber-300 text-sm">
+                        {item.temporaryPin}
+                      </td>
+                      <td className="py-2.5 px-3 text-right">
+                        <a
+                          href={`mailto:${encodeURIComponent(
+                            item.recipientEmail
+                          )}?subject=${encodeURIComponent(
+                            'Your Cloud9 DeepTime Sign-In & Temporary 4-Digit PIN'
+                          )}&body=${encodeURIComponent(
+                            `Hi ${item.displayName},\n\nHere is your temporary 4-digit PIN to sign in to Cloud9 DeepTime:\n\nTemporary 4-Digit PIN: ${item.temporaryPin}\nSign-In Link: https://cloud9-deeptime-production.up.railway.app/login\n\nWhen you log in for the first time, DeepTime will ask you to set your own personal 4-digit PIN.\n\nThanks,\nCloud9 Fulfilment`
+                          )}`}
+                          className="px-2.5 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-sky-300 font-bold inline-flex items-center gap-1"
+                        >
+                          <Mail className="w-3 h-3" />
+                          Open Email
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const lines = bulkInvitesModal.invites.map(
+                    (i) =>
+                      `${i.displayName} (${i.jobTitle}) — Email: ${i.recipientEmail} — Temporary PIN: ${i.temporaryPin} — Login: https://cloud9-deeptime-production.up.railway.app/login`
+                  );
+                  navigator.clipboard?.writeText(lines.join('\n'));
+                  setBanner('Copied all staff temporary PIN invites to clipboard.');
+                }}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 inline-flex items-center gap-1.5"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                Copy All Invites
+              </button>
+              <button
+                type="button"
+                onClick={() => setBulkInvitesModal(null)}
+                className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black"
+              >
+                Done
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

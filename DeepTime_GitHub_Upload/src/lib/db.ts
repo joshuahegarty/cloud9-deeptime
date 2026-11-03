@@ -12,7 +12,7 @@ const txStorage = new AsyncLocalStorage<DbTx>();
 
 const globalForDb = globalThis as unknown as {
   __deeptimePgPromise?: Promise<PGlite>;
-  __deeptimeMigratedV14?: boolean;
+  __deeptimeMigratedV17?: boolean;
   __deeptimeMutex?: Promise<unknown>;
   __deeptimeRealtimeVersion?: number;
 };
@@ -35,6 +35,7 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
   alter table task_types add column if not exists min_charge_minutes int default 0;
   alter table task_types add column if not exists billing_status text not null default 'needs_billed';
   alter table task_types add column if not exists require_units_on_close boolean not null default true;
+  alter table task_types add column if not exists target_enabled boolean not null default true;
   alter table time_entries add column if not exists billing_status text not null default 'needs_billed';
   alter table time_entries add column if not exists unbilled_reason text;
   alter table time_entries add column if not exists billing_review_status text not null default 'pending';
@@ -99,9 +100,13 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
     reporter_role text not null default 'operative',
     status text not null default 'open',
     admin_note text,
+    attachments jsonb not null default '[]'::jsonb,
+    updates_log jsonb not null default '[]'::jsonb,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
   );
+  alter table feedback_reports add column if not exists attachments jsonb not null default '[]'::jsonb;
+  alter table feedback_reports add column if not exists updates_log jsonb not null default '[]'::jsonb;
 
   create or replace function check_time_entry_client_matches_task() returns trigger as $$
   declare
@@ -393,25 +398,84 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
       25.00,
       'BC-STD-LOAD',
       16,
+      false
+    ),
+    (
+      '20000000-0000-0000-0000-000000000118',
+      null,
+      true,
+      'Kitting & Value Add',
+      'Barcoding',
+      'STD-BARCODING',
+      0.50,
+      'units',
+      true,
+      true,
+      24.50,
+      'BC-STD-BARCODE',
+      7,
       true
     )
   on conflict (id) do nothing;
 
-  -- Ensure Standard Order Pick is the #1 default task and never says "Pick & Pack"
+  -- Enforce exact Standard Warehouse Tasks list & order requested by Josh:
+  -- 1. Order Pick
+  -- 2. Order Pack
+  -- 3. Goods In (Containers, Pallets, Boxes)
+  -- 4. Put Away
+  -- 5. B2B Pick
+  -- 6. Rework
+  -- 7. Barcoding
+  -- 8. Returns Processing
+  -- 9. Stock Take
+  -- 10. QC Inspection
   update task_types
-  set name = 'Standard Order Pick', require_units_on_close = false, sort_order = 1
+  set name = 'Order Pick', require_units_on_close = false, target_enabled = false, sort_order = 1, active = true
   where id = '20000000-0000-0000-0000-000000000101';
 
   update task_types
-  set name = 'Standard Order Pack', require_units_on_close = false, sort_order = 2
+  set name = 'Order Pack', require_units_on_close = false, target_enabled = false, sort_order = 2, active = true
   where id = '20000000-0000-0000-0000-000000000106';
 
   update task_types
-  set name = 'Goods-In (Containers / Pallets / Boxes)', sort_order = 3
+  set name = 'Goods In (Containers, Pallets, Boxes)', sort_order = 3, active = true
   where id = '20000000-0000-0000-0000-000000000102';
 
   update task_types
-  set require_units_on_close = false
+  set name = 'Put Away', sort_order = 4, active = true
+  where id = '20000000-0000-0000-0000-000000000112';
+
+  update task_types
+  set name = 'B2B Pick', sort_order = 5, active = true
+  where id = '20000000-0000-0000-0000-000000000113';
+
+  update task_types
+  set name = 'Rework', sort_order = 6, active = true
+  where id = '20000000-0000-0000-0000-000000000104';
+
+  update task_types
+  set name = 'Barcoding', sort_order = 7, active = true
+  where id = '20000000-0000-0000-0000-000000000118';
+
+  update task_types
+  set name = 'Returns Processing', sort_order = 8, active = true
+  where id = '20000000-0000-0000-0000-000000000115';
+
+  update task_types
+  set name = 'Stock Take', sort_order = 9, active = true
+  where id = '20000000-0000-0000-0000-000000000105';
+
+  update task_types
+  set name = 'QC Inspection', sort_order = 10, active = true
+  where id = '20000000-0000-0000-0000-000000000116';
+
+  -- Deactivate removed standard tasks so only the 10 standard warehouse tasks (plus Goods-In sub-tasks) appear
+  update task_types
+  set active = false
+  where code in ('STD-DISPATCH', 'STD-PALLET-BW', 'STD-KITTING', 'STD-LOAD');
+
+  update task_types
+  set require_units_on_close = false, target_enabled = false
   where code in ('STD-PICK', 'STD-PACK');
 
   -- Seed Multi-Client & Alphabetical Clients
@@ -662,15 +726,50 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
     )
   on conflict (id) do nothing;
 
+  -- Enforce exact Cloud9 Housekeeping Tasks requested by Josh:
+  -- Remove Warehouse Floor Sweep & Replen (SCA-REPL)
+  update task_types set active = false where code = 'SCA-REPL';
+
+  -- Keep these 7 Cloud9 Housekeeping Tasks with clean names:
+  update task_types
+  set name = 'Replenishment', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 20, active = true
+  where code = 'INT-REPLEN';
+
+  update task_types
+  set name = 'Warehouse Sweeping & Aisle Cleaning', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 21, active = true
+  where code = 'STD-CLEAN';
+
+  update task_types
+  set name = 'Cardboard Cleanout', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 22, active = true
+  where code = 'INT-CARDBOARD';
+
+  update task_types
+  set name = 'Packing Bench & Consumables Restock', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 23, active = true
+  where code = 'INT-CONSUMABLES';
+
+  update task_types
+  set name = 'Empty Pallet Sorting & Loading', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 24, active = true
+  where code = 'INT-PALLETS';
+
+  update task_types
+  set name = 'Forklift & Safety Check', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 25, active = true
+  where code = 'INT-MHE';
+
+  update task_types
+  set name = 'Team Briefing, Shift Handover & Training', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 26, active = true
+  where code = 'INT-BRIEFING';
+
   update task_types
   set project_name = 'FSDU Retail Display Build Project', project_color = 'amber'
   where id in ('20000000-0000-0000-0000-000000000202', '20000000-0000-0000-0000-000000000003')
     and project_name is null;
 
-  -- Cloud9 Team Roster, Role Tags (job_title), Team Tags (team_name), and Core Warehouse Team flag
+  -- Cloud9 Team Roster, Role Tags (job_title), Team Tags (team_name), Email, Must Change PIN, and Core Warehouse Team flag
   alter table users add column if not exists job_title text;
   alter table users add column if not exists team_name text;
   alter table users add column if not exists is_core_warehouse boolean not null default false;
+  alter table users add column if not exists email text;
+  alter table users add column if not exists must_change_pin boolean not null default false;
 
   drop view if exists users_public;
   create view users_public as
@@ -681,6 +780,8 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
       job_title,
       team_name,
       coalesce(is_core_warehouse, false) as is_core_warehouse,
+      email,
+      coalesce(must_change_pin, false) as must_change_pin,
       active,
       created_at,
       updated_at
@@ -706,36 +807,35 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
     ('00000000-0000-0000-0000-000000000016', 'pin-00000000-0000-0000-0000-000000000016@internal.local', '1013', '{"display_name":"Danny","role":"operative"}'::jsonb),
     ('00000000-0000-0000-0000-000000000017', 'pin-00000000-0000-0000-0000-000000000017@internal.local', '1014', '{"display_name":"Ashton","role":"operative"}'::jsonb)
   on conflict (id) do update set
-    email = excluded.email,
-    encrypted_password = excluded.encrypted_password,
     raw_user_meta_data = excluded.raw_user_meta_data;
 
-  -- Seed / Update Cloud9 Application Users (17 Staff Members with single clean Role Tag)
-  insert into users (id, display_name, role, job_title, team_name, is_core_warehouse, pin_hash, hourly_cost, active) values
-    ('00000000-0000-0000-0000-000000000001', 'Erica', 'operative', 'Core Warehouse Operative', 'Core Warehouse Team', true, '1111', 12.50, true),
-    ('00000000-0000-0000-0000-000000000002', 'Sam', 'operative', 'Core Warehouse Operative', 'Core Warehouse Team', true, '2222', 12.80, true),
-    ('00000000-0000-0000-0000-000000000003', 'Alex', 'operative', 'Core Warehouse Operative', 'Core Warehouse Team', true, '3333', 13.00, true),
-    ('00000000-0000-0000-0000-000000000007', 'Mason', 'operative', 'Core Warehouse Operative', 'Core Warehouse Team', true, '1004', 12.80, true),
-    ('00000000-0000-0000-0000-000000000004', 'Mark', 'supervisor', 'Supervisor • Core Warehouse', 'Core Warehouse Team', true, '4444', 16.50, true),
-    ('00000000-0000-0000-0000-000000000006', 'Edna', 'supervisor', 'Supervisor • Core Warehouse', 'Core Warehouse Team', true, '4445', 16.50, true),
-    ('00000000-0000-0000-0000-000000000005', 'Josh', 'admin', 'CEO, Builder & Admin', 'Executive & Leadership', false, '9999', 25.00, true),
-    ('00000000-0000-0000-0000-000000000008', 'Ben', 'operative', 'CCELL Operative', 'CCELL', false, '1005', 13.00, true),
-    ('00000000-0000-0000-0000-000000000009', 'Jess', 'operative', 'Warehouse Operative', 'Warehouse Team', false, '1006', 12.50, true),
-    ('00000000-0000-0000-0000-000000000010', 'Sabine', 'operative', 'Warehouse Operative', 'Warehouse Team', false, '1007', 12.50, true),
-    ('00000000-0000-0000-0000-000000000011', 'Dan Igel', 'operative', 'Head of People & Operations', 'People & Operations', false, '1008', 18.00, true),
-    ('00000000-0000-0000-0000-000000000012', 'Billy', 'operative', 'Operations', 'Operations', false, '1009', 15.00, true),
-    ('00000000-0000-0000-0000-000000000013', 'Mike', 'operative', 'Sales', 'Sales', false, '1010', 15.00, true),
-    ('00000000-0000-0000-0000-000000000014', 'Ray', 'operative', 'Sales • Warehouse Operative', 'Sales', false, '1011', 15.00, true),
-    ('00000000-0000-0000-0000-000000000015', 'Adrian', 'operative', 'Marketing & Innovations', 'Marketing & Innovations', false, '1012', 14.50, true),
-    ('00000000-0000-0000-0000-000000000016', 'Danny', 'operative', 'Marketing & Innovations', 'Marketing & Innovations', false, '1013', 14.50, true),
-    ('00000000-0000-0000-0000-000000000017', 'Ashton', 'operative', 'Marketing & Innovations', 'Marketing & Innovations', false, '1014', 14.50, true)
+  -- Seed / Update Cloud9 Application Users (17 Staff Members with single clean Role Tag & Email)
+  insert into users (id, display_name, role, job_title, team_name, is_core_warehouse, email, pin_hash, hourly_cost, active) values
+    ('00000000-0000-0000-0000-000000000004', 'Mark', 'supervisor', 'Supervisor • Core Warehouse', 'Core Warehouse Team', true, 'mark@cloud9fulfilment.co.uk', '4444', 16.50, true),
+    ('00000000-0000-0000-0000-000000000006', 'Edna', 'supervisor', 'Supervisor • Core Warehouse', 'Core Warehouse Team', true, 'edna@cloud9fulfilment.co.uk', '4445', 16.50, true),
+    ('00000000-0000-0000-0000-000000000001', 'Erica', 'operative', 'Core Warehouse Operative', 'Core Warehouse Team', true, 'erica@cloud9fulfilment.co.uk', '1111', 12.50, true),
+    ('00000000-0000-0000-0000-000000000002', 'Sam', 'operative', 'Core Warehouse Operative', 'Core Warehouse Team', true, 'sam@cloud9fulfilment.co.uk', '2222', 12.80, true),
+    ('00000000-0000-0000-0000-000000000003', 'Alex', 'operative', 'Core Warehouse Operative', 'Core Warehouse Team', true, 'alex@cloud9fulfilment.co.uk', '3333', 13.00, true),
+    ('00000000-0000-0000-0000-000000000007', 'Mason', 'operative', 'Core Warehouse Operative', 'Core Warehouse Team', true, 'mason@cloud9fulfilment.co.uk', '1004', 12.80, true),
+    ('00000000-0000-0000-0000-000000000005', 'Josh', 'admin', 'CEO, Builder & Admin', 'Executive & Leadership', false, 'josh@cloud9fulfilment.co.uk', '9999', 25.00, true),
+    ('00000000-0000-0000-0000-000000000008', 'Ben', 'operative', 'CCELL Operative', 'CCELL', false, 'ben@cloud9fulfilment.co.uk', '1005', 13.00, true),
+    ('00000000-0000-0000-0000-000000000009', 'Jess', 'operative', 'Warehouse Operative', 'Warehouse Team', false, 'jess@cloud9fulfilment.co.uk', '1006', 12.50, true),
+    ('00000000-0000-0000-0000-000000000010', 'Sabine', 'operative', 'Warehouse Operative', 'Warehouse Team', false, 'sabine@cloud9fulfilment.co.uk', '1007', 12.50, true),
+    ('00000000-0000-0000-0000-000000000011', 'Dan Igel', 'operative', 'Head of People & Operations', 'People & Operations', false, 'dan.igel@cloud9fulfilment.co.uk', '1008', 18.00, true),
+    ('00000000-0000-0000-0000-000000000012', 'Billy', 'operative', 'Operations', 'Operations', false, 'billy@cloud9fulfilment.co.uk', '1009', 15.00, true),
+    ('00000000-0000-0000-0000-000000000013', 'Mike', 'operative', 'Sales', 'Sales', false, 'mike@cloud9fulfilment.co.uk', '1010', 15.00, true),
+    ('00000000-0000-0000-0000-000000000014', 'Ray', 'operative', 'Sales • Warehouse Operative', 'Sales', false, 'ray@cloud9fulfilment.co.uk', '1011', 15.00, true),
+    ('00000000-0000-0000-0000-000000000015', 'Adrian', 'operative', 'Marketing & Innovations', 'Marketing & Innovations', false, 'adrian@cloud9fulfilment.co.uk', '1012', 14.50, true),
+    ('00000000-0000-0000-0000-000000000016', 'Danny', 'operative', 'Marketing & Innovations', 'Marketing & Innovations', false, 'danny@cloud9fulfilment.co.uk', '1013', 14.50, true),
+    ('00000000-0000-0000-0000-000000000017', 'Ashton', 'operative', 'Marketing & Innovations', 'Marketing & Innovations', false, 'ashton@cloud9fulfilment.co.uk', '1014', 14.50, true)
   on conflict (id) do update set
     display_name = excluded.display_name,
     role = excluded.role,
     job_title = excluded.job_title,
     team_name = excluded.team_name,
     is_core_warehouse = excluded.is_core_warehouse,
-    pin_hash = excluded.pin_hash,
+    email = coalesce(users.email, excluded.email),
+    pin_hash = coalesce(users.pin_hash, excluded.pin_hash),
     active = excluded.active;
 
   -- Seed initial Supervisor-Assigned tasks for Erica so "Assigned to You" tab works out of the box
@@ -772,6 +872,55 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
       'pending'
     )
   on conflict (id) do nothing;
+
+  -- Seed initial Feature Requests & Bug Reports so the Feedback & Roadmap Board is populated out of the box
+  insert into feedback_reports (
+    id, type, severity, title, description, page_path,
+    reporter_user_id, reporter_name, reporter_role, status, admin_note, updates_log
+  ) values
+    (
+      '80000000-0000-0000-0000-000000000001',
+      'feature',
+      'high',
+      '1-Click Manager Clock In/Out & Undo on Live Tally Counter',
+      'Allow supervisors on the Floor page to clock staff in/out in 1 click, and add an Undo button on the +1/+5/+10 Live Tally counter.',
+      '/floor',
+      '00000000-0000-0000-0000-000000000005',
+      'Josh',
+      'admin',
+      'resolved',
+      'Shipped live — 1-click Clock In/Out added to Floor actions column and Undo button added to the Batch/Lap Counter.',
+      '[{"id":"upd-1","author_name":"Josh","author_role":"admin","status":"resolved","note":"Shipped live — 1-click Clock In/Out added to Floor actions column and Undo button added to the Batch/Lap Counter.","created_at":"2026-11-03T21:18:00.000Z"}]'::jsonb
+    ),
+    (
+      '80000000-0000-0000-0000-000000000002',
+      'feature',
+      'high',
+      'Dispatch Cloud Helm Order Pick & Pack Integration',
+      'Pull daily Order Pick and Order Pack counts automatically from Dispatch Cloud Helm so operatives never have to type order counts manually.',
+      '/now',
+      '00000000-0000-0000-0000-000000000005',
+      'Josh',
+      'admin',
+      'in_progress',
+      'Phase 1 complete: disabled manual unit prompts and targets on Order Pick & Order Pack. Phase 2: connecting Dispatch Cloud Helm API.',
+      '[{"id":"upd-2","author_name":"Josh","author_role":"admin","status":"in_progress","note":"Phase 1 complete: disabled manual unit prompts and targets on Order Pick & Order Pack. Phase 2: connecting Dispatch Cloud Helm API.","created_at":"2026-11-03T21:10:00.000Z"}]'::jsonb
+    ),
+    (
+      '80000000-0000-0000-0000-000000000003',
+      'feature',
+      'medium',
+      'First-Time PIN Setup Email Invites for All Staff',
+      'Send temporary PIN invites by email so staff members are prompted to choose their own 4-digit PIN the first time they sign in.',
+      '/setup/users',
+      '00000000-0000-0000-0000-000000000004',
+      'Mark',
+      'supervisor',
+      'resolved',
+      'Done — Temp PIN invite generator and first-login Change PIN modal are now live.',
+      '[{"id":"upd-3","author_name":"Josh","author_role":"admin","status":"resolved","note":"Done — Temp PIN invite generator and first-login Change PIN modal are now live.","created_at":"2026-11-03T21:05:00.000Z"}]'::jsonb
+    )
+  on conflict (id) do nothing;
 `;
 
 async function applySchemaAndSeed(pg: PGlite, includeSeed = true, includeStandardTasks = true) {
@@ -803,13 +952,13 @@ export async function getDb(): Promise<PGlite> {
       const pg = new PGlite(dataDir);
       await pg.waitReady;
       await applySchemaAndSeed(pg, true, true);
-      globalForDb.__deeptimeMigratedV14 = true;
+      globalForDb.__deeptimeMigratedV17 = true;
       return pg;
     })();
-  } else if (!globalForDb.__deeptimeMigratedV14) {
+  } else if (!globalForDb.__deeptimeMigratedV17) {
     const pg = await globalForDb.__deeptimePgPromise;
     await pg.exec(UPGRADE_AND_STANDARD_TASKS_SQL);
-    globalForDb.__deeptimeMigratedV14 = true;
+    globalForDb.__deeptimeMigratedV17 = true;
   }
   return globalForDb.__deeptimePgPromise;
 }

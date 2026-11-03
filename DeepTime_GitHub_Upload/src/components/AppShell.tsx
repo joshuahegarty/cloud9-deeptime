@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  changeOwnPinAction,
   logoutAction,
   quickSwitchUserAction,
   replayOfflineQueueAction,
@@ -16,7 +17,9 @@ import {
   ClipboardList,
   Clock,
   FileSpreadsheet,
+  KeyRound,
   LogOut,
+  Menu,
   MonitorSmartphone,
   Moon,
   Receipt,
@@ -27,6 +30,7 @@ import {
   Unlock,
   Wifi,
   WifiOff,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -37,24 +41,57 @@ interface AppShellProps {
   children: React.ReactNode;
 }
 
-const DEMO_USERS = [
-  { id: '00000000-0000-0000-0000-000000000005', label: 'Josh — CEO, Builder & Admin' },
-  { id: '00000000-0000-0000-0000-000000000004', label: 'Mark — Supervisor • Core Warehouse' },
-  { id: '00000000-0000-0000-0000-000000000006', label: 'Edna — Supervisor • Core Warehouse' },
+const PRIMARY_DEMO_USERS = [
+  { id: '00000000-0000-0000-0000-000000000004', label: '⭐ Mark — Supervisor • Core Warehouse' },
+  { id: '00000000-0000-0000-0000-000000000006', label: '⭐ Edna — Supervisor • Core Warehouse' },
   { id: '00000000-0000-0000-0000-000000000001', label: 'Erica — Core Warehouse Operative' },
   { id: '00000000-0000-0000-0000-000000000002', label: 'Sam — Core Warehouse Operative' },
   { id: '00000000-0000-0000-0000-000000000003', label: 'Alex — Core Warehouse Operative' },
   { id: '00000000-0000-0000-0000-000000000007', label: 'Mason — Core Warehouse Operative' },
-  { id: '00000000-0000-0000-0000-000000000008', label: 'Ben — CCELL Operative' },
-  { id: '00000000-0000-0000-0000-000000000009', label: 'Jess — Warehouse Operative' },
-  { id: '00000000-0000-0000-0000-000000000010', label: 'Sabine — Warehouse Operative' },
-  { id: '00000000-0000-0000-0000-000000000011', label: 'Dan Igel — Head of People & Operations' },
-  { id: '00000000-0000-0000-0000-000000000012', label: 'Billy — Operations' },
-  { id: '00000000-0000-0000-0000-000000000013', label: 'Mike — Sales' },
-  { id: '00000000-0000-0000-0000-000000000014', label: 'Ray — Sales • Warehouse Operative' },
-  { id: '00000000-0000-0000-0000-000000000015', label: 'Adrian — Marketing & Innovations' },
-  { id: '00000000-0000-0000-0000-000000000016', label: 'Danny — Marketing & Innovations' },
-  { id: '00000000-0000-0000-0000-000000000017', label: 'Ashton — Marketing & Innovations' },
+];
+
+const ADDITIONAL_DEMO_USER_GROUPS = [
+  {
+    dept: 'CCELL & Warehouse Support',
+    users: [
+      { id: '00000000-0000-0000-0000-000000000008', label: 'Ben — CCELL Operative' },
+      { id: '00000000-0000-0000-0000-000000000009', label: 'Jess — Warehouse Operative' },
+      { id: '00000000-0000-0000-0000-000000000010', label: 'Sabine — Warehouse Operative' },
+    ],
+  },
+  {
+    dept: 'People & Operations',
+    users: [
+      { id: '00000000-0000-0000-0000-000000000011', label: 'Dan Igel — Head of People & Operations' },
+      { id: '00000000-0000-0000-0000-000000000012', label: 'Billy — Operations' },
+    ],
+  },
+  {
+    dept: 'Sales Team',
+    users: [
+      { id: '00000000-0000-0000-0000-000000000013', label: 'Mike — Sales' },
+      { id: '00000000-0000-0000-0000-000000000014', label: 'Ray — Sales • Warehouse Operative' },
+    ],
+  },
+  {
+    dept: 'Marketing & Innovations',
+    users: [
+      { id: '00000000-0000-0000-0000-000000000015', label: 'Adrian — Marketing & Innovations' },
+      { id: '00000000-0000-0000-0000-000000000016', label: 'Danny — Marketing & Innovations' },
+      { id: '00000000-0000-0000-0000-000000000017', label: 'Ashton — Marketing & Innovations' },
+    ],
+  },
+  {
+    dept: 'Executive & Admin',
+    users: [
+      { id: '00000000-0000-0000-0000-000000000005', label: 'Josh — CEO, Builder & Admin' },
+    ],
+  },
+];
+
+const DEMO_USERS = [
+  ...PRIMARY_DEMO_USERS,
+  ...ADDITIONAL_DEMO_USER_GROUPS.flatMap((g) => g.users),
 ];
 
 export function AppShell({ user, children }: AppShellProps) {
@@ -67,7 +104,83 @@ export function AppShell({ user, children }: AppShellProps) {
   const [isKioskDevice, setIsKioskDevice] = useState(false);
   const [lightMode, setLightMode] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [demoSwitcherUnlocked, setDemoSwitcherUnlocked] = useState(false);
+  const [pinModalOpen, setPinModalOpen] = useState(false);
+  const [currentPinInput, setCurrentPinInput] = useState('');
+  const [newPinInput, setNewPinInput] = useState('');
+  const [confirmPinInput, setConfirmPinInput] = useState('');
+  const [activePinField, setActivePinField] = useState<'current' | 'new' | 'confirm'>('new');
+  const [showPinDigits, setShowPinDigits] = useState(true);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinSuccess, setPinSuccess] = useState<string | null>(null);
+  const [pinSaving, setPinSaving] = useState(false);
+
+  const isForcedPinChange = Boolean(user?.must_change_pin);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (user?.must_change_pin) {
+      setActivePinField('new');
+      setPinModalOpen(true);
+    }
+  }, [user?.id, user?.must_change_pin]);
+
+  useEffect(() => {
+    const onOpenChangePin = () => {
+      setPinError(null);
+      setPinSuccess(null);
+      setCurrentPinInput('');
+      setNewPinInput('');
+      setConfirmPinInput('');
+      setActivePinField('new');
+      setPinModalOpen(true);
+    };
+    window.addEventListener('c9-open-change-pin', onOpenChangePin);
+    return () => window.removeEventListener('c9-open-change-pin', onOpenChangePin);
+  }, []);
+
+  const handleSavePinChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPinError(null);
+    setPinSuccess(null);
+    if (!/^\d{4}$/.test(newPinInput.trim())) {
+      setPinError('Your new PIN must be exactly 4 digits.');
+      return;
+    }
+    if (newPinInput.trim() !== confirmPinInput.trim()) {
+      setPinError('New PIN and confirmation do not match.');
+      return;
+    }
+    setPinSaving(true);
+    try {
+      const res = await changeOwnPinAction({
+        currentPin: isForcedPinChange ? undefined : currentPinInput.trim() || undefined,
+        newPin: newPinInput.trim(),
+        confirmPin: confirmPinInput.trim(),
+      });
+      if (!res.ok) {
+        setPinError(res.error || 'Failed to update PIN.');
+      } else {
+        setPinSuccess('Your 4-digit PIN has been saved!');
+        setCurrentPinInput('');
+        setNewPinInput('');
+        setConfirmPinInput('');
+        setTimeout(() => {
+          setPinModalOpen(false);
+          setPinSuccess(null);
+          router.refresh();
+        }, 700);
+      }
+    } catch (err: any) {
+      setPinError(err?.message || 'Failed to update PIN.');
+    } finally {
+      setPinSaving(false);
+    }
+  };
 
   // Automatic 7:00 PM (19:00 Europe/London) End-of-Shift Auto-Close & Auto-Logout (Item #19)
   useEffect(() => {
@@ -206,7 +319,8 @@ export function AppShell({ user, children }: AppShellProps) {
       pathname !== '/kiosk' &&
       pathname !== '/now' &&
       pathname !== '/login' &&
-      pathname !== '/guide'
+      pathname !== '/guide' &&
+      pathname !== '/feedback'
     ) {
       router.replace('/kiosk');
     }
@@ -293,8 +407,8 @@ export function AppShell({ user, children }: AppShellProps) {
             </div>
           </Link>
 
-          {/* Navigation Links — Clean Single Row with No Scrollbar */}
-          <nav className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1">
+          {/* Desktop Navigation Links (>= lg) */}
+          <nav className="hidden lg:flex items-center gap-1 overflow-x-auto no-scrollbar py-1">
             {isKioskDevice ? (
               <>
                 <NavLink
@@ -370,6 +484,13 @@ export function AppShell({ user, children }: AppShellProps) {
                       </NavLink>
                     </>
                   )}
+                  <NavLink
+                    href="/feedback"
+                    active={pathname === '/feedback'}
+                    icon={<Bug className="w-3.5 h-3.5" />}
+                  >
+                    Feedback &amp; Roadmap
+                  </NavLink>
                   <NavLink
                     href="/guide"
                     active={pathname === '/guide'}
@@ -448,7 +569,7 @@ export function AppShell({ user, children }: AppShellProps) {
             >
               <Bug className="w-3.5 h-3.5 text-emerald-400" />
               <span className="hidden md:inline">Report / Idea</span>
-              <kbd className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-emerald-300 font-mono text-[10px] font-black">
+              <kbd className="hidden sm:inline-block px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-emerald-300 font-mono text-[10px] font-black">
                 F8
               </kbd>
             </button>
@@ -456,7 +577,7 @@ export function AppShell({ user, children }: AppShellProps) {
             <button
               type="button"
               onClick={toggleTheme}
-              className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold transition"
+              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold transition"
               title={lightMode ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
               aria-label="Toggle theme"
             >
@@ -473,19 +594,31 @@ export function AppShell({ user, children }: AppShellProps) {
               )}
             </button>
 
+            {/* Desktop User Controls (>= lg) */}
             {user ? (
-              <div className="flex items-center gap-1.5">
+              <div className="hidden lg:flex items-center gap-1.5">
                 {isStaff || demoSwitcherUnlocked ? (
                   <select
                     value={user.id}
                     onChange={(e) => handleQuickSwitchUser(e.target.value)}
                     className="h-9 max-w-[195px] px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-100 border border-slate-700 focus:outline-none focus:border-emerald-500 cursor-pointer"
-                    title="Quick-switch user or role (Operative / Supervisor / Admin)"
+                    title="Quick-switch user or role (Mark & Edna first, then Core Warehouse, then Additional Staff by Department)"
                   >
-                    {DEMO_USERS.map((du) => (
-                      <option key={du.id} value={du.id}>
-                        {du.label}
-                      </option>
+                    <optgroup label="⭐ Supervisors (Mark & Edna) & Core Warehouse">
+                      {PRIMARY_DEMO_USERS.map((du) => (
+                        <option key={du.id} value={du.id}>
+                          {du.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                    {ADDITIONAL_DEMO_USER_GROUPS.map((grp) => (
+                      <optgroup key={grp.dept} label={`Additional Staff — ${grp.dept}`}>
+                        {grp.users.map((du) => (
+                          <option key={du.id} value={du.id}>
+                            {du.label}
+                          </option>
+                        ))}
+                      </optgroup>
                     ))}
                     {!DEMO_USERS.some((du) => du.id === user.id) && (
                       <option value={user.id}>
@@ -516,6 +649,28 @@ export function AppShell({ user, children }: AppShellProps) {
 
                 <button
                   type="button"
+                  onClick={() => {
+                    setPinError(null);
+                    setPinSuccess(null);
+                    setCurrentPinInput('');
+                    setNewPinInput('');
+                    setConfirmPinInput('');
+                    setActivePinField('new');
+                    setPinModalOpen(true);
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-bold border transition whitespace-nowrap ${
+                    isForcedPinChange
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 animate-pulse'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                  }`}
+                  title="Change your 4-digit sign-in PIN"
+                >
+                  <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Change PIN</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={handleLogout}
                   className="p-2 rounded-lg bg-slate-800 hover:bg-rose-950/80 hover:text-rose-300 text-slate-300 border border-slate-700 transition"
                   title="Sign out"
@@ -533,8 +688,306 @@ export function AppShell({ user, children }: AppShellProps) {
                 </Link>
               )
             )}
+
+            {/* Mobile & Android Expanding Top Menu Button (< lg) */}
+            {user && (
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen((prev) => !prev)}
+                aria-expanded={mobileMenuOpen}
+                aria-label="Toggle mobile navigation menu"
+                className={`lg:hidden inline-flex items-center gap-1.5 h-10 px-3 rounded-xl font-black text-xs border transition ${
+                  mobileMenuOpen
+                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                    : 'bg-slate-800 hover:bg-slate-700 text-white border-slate-700'
+                }`}
+              >
+                {mobileMenuOpen ? (
+                  <>
+                    <X className="w-4 h-4" />
+                    <span>Close</span>
+                  </>
+                ) : (
+                  <>
+                    <Menu className="w-4 h-4 text-emerald-400" />
+                    <span>Menu</span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
+
+        {/* Expanding Mobile & Android Navigation Drawer (< lg) */}
+        {mobileMenuOpen && user && (
+          <div className="lg:hidden border-t border-slate-800 bg-slate-950/98 px-3.5 py-4 space-y-4 shadow-2xl animate-in slide-in-from-top-2">
+            {/* Navigation Grid (Touch-Friendly 48px+ Tiles for Android / Mobile) */}
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 px-1">
+                Navigation Menu
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {isKioskDevice ? (
+                  <>
+                    <Link
+                      href="/kiosk"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
+                        pathname === '/kiosk'
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                          : 'bg-slate-900 text-slate-200 border-slate-800'
+                      }`}
+                    >
+                      <Tablet className="w-4 h-4 shrink-0" />
+                      <span>Kiosk Grid</span>
+                    </Link>
+                    <Link
+                      href="/now?kiosk=1"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
+                        pathname === '/now'
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                          : 'bg-slate-900 text-slate-200 border-slate-800'
+                      }`}
+                    >
+                      <Clock className="w-4 h-4 shrink-0" />
+                      <span>Active Timer ({user.display_name.split(' ')[0]})</span>
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      href="/now"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
+                        pathname === '/now'
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                          : 'bg-slate-900 text-slate-200 border-slate-800'
+                      }`}
+                    >
+                      <Clock className="w-4 h-4 shrink-0" />
+                      <span>Now (Timer)</span>
+                    </Link>
+                    <Link
+                      href="/kiosk"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
+                        pathname === '/kiosk'
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                          : 'bg-slate-900 text-slate-200 border-slate-800'
+                      }`}
+                    >
+                      <Tablet className="w-4 h-4 shrink-0" />
+                      <span>Kiosk</span>
+                    </Link>
+                    {isStaff && (
+                      <>
+                        <Link
+                          href="/floor"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
+                            pathname === '/floor'
+                              ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                              : 'bg-slate-900 text-slate-200 border-slate-800'
+                          }`}
+                        >
+                          <Activity className="w-4 h-4 shrink-0" />
+                          <span>Floor Live</span>
+                        </Link>
+                        <Link
+                          href="/entries"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
+                            pathname === '/entries'
+                              ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                              : 'bg-slate-900 text-slate-200 border-slate-800'
+                          }`}
+                        >
+                          <ClipboardList className="w-4 h-4 shrink-0" />
+                          <span>Entries</span>
+                        </Link>
+                        <Link
+                          href="/reports"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
+                            pathname === '/reports'
+                              ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                              : 'bg-slate-900 text-slate-200 border-slate-800'
+                          }`}
+                        >
+                          <FileSpreadsheet className="w-4 h-4 shrink-0" />
+                          <span>Reports</span>
+                        </Link>
+                        <Link
+                          href="/reports/billing"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
+                            pathname === '/reports/billing'
+                              ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                              : 'bg-slate-900 text-slate-200 border-slate-800'
+                          }`}
+                        >
+                          <Receipt className="w-4 h-4 shrink-0" />
+                          <span>Billing</span>
+                        </Link>
+                        <Link
+                          href="/setup"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
+                            pathname.startsWith('/setup')
+                              ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                              : 'bg-slate-900 text-slate-200 border-slate-800'
+                          }`}
+                        >
+                          <Settings className="w-4 h-4 shrink-0" />
+                          <span>Setup</span>
+                        </Link>
+                      </>
+                    )}
+                    <Link
+                      href="/feedback"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
+                        pathname === '/feedback'
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                          : 'bg-slate-900 text-slate-200 border-slate-800'
+                      }`}
+                    >
+                      <Bug className="w-4 h-4 shrink-0" />
+                      <span>Feedback Board</span>
+                    </Link>
+                    <Link
+                      href="/guide"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
+                        pathname === '/guide'
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                          : 'bg-slate-900 text-slate-200 border-slate-800'
+                      }`}
+                    >
+                      <BookOpen className="w-4 h-4 shrink-0" />
+                      <span>Guide &amp; Mindmap</span>
+                    </Link>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Staff / Demo User Switcher & Quick Controls */}
+            <div className="pt-3 border-t border-slate-800/80 space-y-3">
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">
+                  Signed In As ({user.display_name})
+                </label>
+                {isStaff || demoSwitcherUnlocked ? (
+                  <select
+                    value={user.id}
+                    onChange={(e) => {
+                      setMobileMenuOpen(false);
+                      handleQuickSwitchUser(e.target.value);
+                    }}
+                    className="w-full h-11 px-3 rounded-xl bg-slate-900 text-xs font-bold text-slate-100 border border-slate-700"
+                  >
+                    <optgroup label="⭐ Supervisors (Mark & Edna) & Core Warehouse">
+                      {PRIMARY_DEMO_USERS.map((du) => (
+                        <option key={du.id} value={du.id}>
+                          {du.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                    {ADDITIONAL_DEMO_USER_GROUPS.map((grp) => (
+                      <optgroup key={grp.dept} label={`Additional Staff — ${grp.dept}`}>
+                        {grp.users.map((du) => (
+                          <option key={du.id} value={du.id}>
+                            {du.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-white">
+                      {user.display_name} ({user.job_title || user.role})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setDemoSwitcherUnlocked(true)}
+                      className="px-3 py-1.5 rounded-lg bg-slate-900 text-xs font-bold text-amber-300 border border-slate-800"
+                    >
+                      Unlock Demo Switcher
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setPinError(null);
+                    setPinSuccess(null);
+                    setCurrentPinInput('');
+                    setNewPinInput('');
+                    setConfirmPinInput('');
+                    setActivePinField('new');
+                    setPinModalOpen(true);
+                  }}
+                  className="min-h-[44px] px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-xs font-bold text-amber-300 border border-slate-800 flex items-center justify-center gap-1.5"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>Change PIN</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setFeedbackOpen(true);
+                  }}
+                  className="min-h-[44px] px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-xs font-bold text-emerald-300 border border-slate-800 flex items-center justify-center gap-1.5"
+                >
+                  <Bug className="w-3.5 h-3.5" />
+                  <span>Report / Idea</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    toggleTheme();
+                    setMobileMenuOpen(false);
+                  }}
+                  className="min-h-[44px] px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-xs font-bold text-slate-200 border border-slate-800 flex items-center justify-center gap-1.5"
+                >
+                  {lightMode ? (
+                    <>
+                      <Moon className="w-3.5 h-3.5" />
+                      <span>Dark Mode</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sun className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Light Mode</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    handleLogout();
+                  }}
+                  className="min-h-[44px] px-3 py-2 rounded-xl bg-rose-950/60 hover:bg-rose-900 text-xs font-bold text-rose-200 border border-rose-500/40 flex items-center justify-center gap-1.5"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Main Content */}
@@ -547,6 +1000,237 @@ export function AppShell({ user, children }: AppShellProps) {
         user={user}
         currentPath={pathname}
       />
+
+      {/* Change PIN / First-Login Set Personal PIN Modal */}
+      {pinModalOpen && user && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+              <div className="flex items-center gap-2.5">
+                <span className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                  <KeyRound className="w-4 h-4" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-black text-white">
+                    {isForcedPinChange
+                      ? 'Set Your Personal 4-Digit PIN'
+                      : 'Change Your 4-Digit PIN'}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    {user.display_name} • {user.job_title || user.role}
+                  </p>
+                </div>
+              </div>
+              {!isForcedPinChange && (
+                <button
+                  type="button"
+                  onClick={() => setPinModalOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            <form onSubmit={handleSavePinChange} className="p-5 space-y-4">
+              {isForcedPinChange && (
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 leading-relaxed">
+                  Welcome to <strong>Cloud9 DeepTime</strong>! Since you signed in with a temporary invite PIN, please choose your own personal 4-digit PIN for fast sign-in going forward.
+                </div>
+              )}
+
+              {!isForcedPinChange && (
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
+                    Current 4-Digit PIN (Optional if unknown)
+                  </label>
+                  <input
+                    type={showPinDigits ? 'text' : 'password'}
+                    inputMode="numeric"
+                    maxLength={4}
+                    value={currentPinInput}
+                    onFocus={() => setActivePinField('current')}
+                    onChange={(e) => setCurrentPinInput(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    placeholder="••••"
+                    className={`w-full h-11 px-3 rounded-xl bg-slate-950 border text-white font-mono text-lg tracking-widest focus:outline-none ${
+                      activePinField === 'current' ? 'border-emerald-500' : 'border-slate-700'
+                    }`}
+                  />
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1">
+                    New 4-Digit PIN *
+                  </label>
+                  <input
+                    type={showPinDigits ? 'text' : 'password'}
+                    inputMode="numeric"
+                    maxLength={4}
+                    required
+                    value={newPinInput}
+                    onFocus={() => setActivePinField('new')}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                      setNewPinInput(val);
+                      if (val.length === 4) setActivePinField('confirm');
+                    }}
+                    placeholder="1234"
+                    className={`w-full h-12 px-3 rounded-xl bg-slate-950 border text-emerald-300 font-mono text-xl font-black tracking-widest text-center focus:outline-none ${
+                      activePinField === 'new'
+                        ? 'border-emerald-400 ring-1 ring-emerald-400/50'
+                        : 'border-slate-700'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1">
+                    Confirm New PIN *
+                  </label>
+                  <input
+                    type={showPinDigits ? 'text' : 'password'}
+                    inputMode="numeric"
+                    maxLength={4}
+                    required
+                    value={confirmPinInput}
+                    onFocus={() => setActivePinField('confirm')}
+                    onChange={(e) => setConfirmPinInput(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    placeholder="1234"
+                    className={`w-full h-12 px-3 rounded-xl bg-slate-950 border text-emerald-300 font-mono text-xl font-black tracking-widest text-center focus:outline-none ${
+                      activePinField === 'confirm'
+                        ? 'border-emerald-400 ring-1 ring-emerald-400/50'
+                        : 'border-slate-700'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              {/* Touch Keypad for Tablet / Phone PIN Entry */}
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <span>
+                    Typing into:{' '}
+                    <strong className="text-emerald-300 uppercase">
+                      {activePinField === 'new'
+                        ? 'New 4-Digit PIN'
+                        : activePinField === 'confirm'
+                        ? 'Confirm New PIN'
+                        : 'Current PIN'}
+                    </strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowPinDigits((p) => !p)}
+                    className="text-sky-400 hover:underline font-bold"
+                  >
+                    {showPinDigits ? 'Hide Digits' : 'Show Digits'}
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => {
+                        setPinError(null);
+                        if (activePinField === 'current') {
+                          setCurrentPinInput((prev) => (prev + d).slice(0, 4));
+                        } else if (activePinField === 'new') {
+                          const next = (newPinInput + d).slice(0, 4);
+                          setNewPinInput(next);
+                          if (next.length === 4) setActivePinField('confirm');
+                        } else {
+                          setConfirmPinInput((prev) => (prev + d).slice(0, 4));
+                        }
+                      }}
+                      className="h-11 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-emerald-500 active:text-slate-950 border border-slate-700 text-lg font-black text-white transition"
+                    >
+                      {d}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPinError(null);
+                      if (activePinField === 'current') setCurrentPinInput('');
+                      else if (activePinField === 'new') setNewPinInput('');
+                      else setConfirmPinInput('');
+                    }}
+                    className="h-11 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-slate-400"
+                  >
+                    CLEAR
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPinError(null);
+                      if (activePinField === 'current') {
+                        setCurrentPinInput((prev) => (prev + '0').slice(0, 4));
+                      } else if (activePinField === 'new') {
+                        const next = (newPinInput + '0').slice(0, 4);
+                        setNewPinInput(next);
+                        if (next.length === 4) setActivePinField('confirm');
+                      } else {
+                        setConfirmPinInput((prev) => (prev + '0').slice(0, 4));
+                      }
+                    }}
+                    className="h-11 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-emerald-500 active:text-slate-950 border border-slate-700 text-lg font-black text-white transition"
+                  >
+                    0
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPinError(null);
+                      if (activePinField === 'current') {
+                        setCurrentPinInput((prev) => prev.slice(0, -1));
+                      } else if (activePinField === 'new') {
+                        setNewPinInput((prev) => prev.slice(0, -1));
+                      } else {
+                        setConfirmPinInput((prev) => prev.slice(0, -1));
+                      }
+                    }}
+                    className="h-11 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-slate-300"
+                  >
+                    ⌫ Back
+                  </button>
+                </div>
+              </div>
+
+              {pinError && (
+                <div className="p-2.5 rounded-lg bg-rose-950/80 border border-rose-700 text-xs font-semibold text-rose-200">
+                  {pinError}
+                </div>
+              )}
+              {pinSuccess && (
+                <div className="p-2.5 rounded-lg bg-emerald-950/80 border border-emerald-700 text-xs font-semibold text-emerald-200">
+                  {pinSuccess}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                {!isForcedPinChange && (
+                  <button
+                    type="button"
+                    onClick={() => setPinModalOpen(false)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300"
+                  >
+                    Cancel
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={pinSaving}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 text-xs font-black shadow-lg shadow-emerald-500/20"
+                >
+                  {pinSaving ? 'Saving PIN...' : 'Save Personal 4-Digit PIN'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

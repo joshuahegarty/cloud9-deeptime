@@ -2,6 +2,8 @@
 
 import {
   assignTaskToOperativeAction,
+  clockInAction,
+  clockOutAction,
   resumeOperativeOnCrewAction,
   reviewBillingEntryAction,
   runIdleAutoStopJobAction,
@@ -11,13 +13,21 @@ import {
   stopTaskAction,
 } from '@/app/actions';
 import { formatElapsedHMS, formatLondonTime } from '@/lib/calculations';
-import { getRoleBadgeClass } from '@/lib/roleBadge';
+import { appendTranscript, VoiceMicButton } from '@/components/VoiceMicButton';
+import {
+  ADDITIONAL_GROUP_ORDER,
+  getAdditionalStaffGroupLabel,
+  getRoleBadgeClass,
+  getStaffPriorityRank,
+  isPrimaryStaffMember,
+} from '@/lib/roleBadge';
 import { getSupabaseBrowserClient } from '@/lib/supabase';
 import { AppSettings, Attendance, Client, TaskType, TimeEntry, UserPublic } from '@/lib/types';
 import {
   Activity,
   AlertTriangle,
   Check,
+  ChevronDown,
   Clock,
   Play,
   RefreshCw,
@@ -70,6 +80,9 @@ export function FloorClient({
     opName: string;
   } | null>(null);
   const [stopModalUnits, setStopModalUnits] = useState<string>('');
+  const [stopGoodsInUnitType, setStopGoodsInUnitType] = useState<
+    'pallets' | 'containers' | 'boxes'
+  >('pallets');
   const [stopZeroConfirmTarget, setStopZeroConfirmTarget] = useState<
     | { kind: 'single'; units: number }
     | { kind: 'crew'; crewId: string; units: number }
@@ -83,10 +96,12 @@ export function FloorClient({
     members: string[];
   } | null>(null);
   const [stopCrewUnits, setStopCrewUnits] = useState<string>('');
+  const [stopZeroReason, setStopZeroReason] = useState<string>('');
 
   // Assign Task to Operative Modal (Item #7)
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showOtherFloorStaff, setShowOtherFloorStaff] = useState(false);
+  const [expandedFloorDepts, setExpandedFloorDepts] = useState<Record<string, boolean>>({});
   const [assignOperativeId, setAssignOperativeId] = useState<string>(
     initialRows[0]?.operative.id ?? ''
   );
@@ -461,26 +476,125 @@ export function FloorClient({
     router.refresh();
   };
 
-  const handleStopSingleEntry = (entry: TimeEntry, opName: string) => {
+  const handleToggleClockInOut = async (
+    operative: UserPublic,
+    isClockedIn: boolean
+  ) => {
+    setBusy(true);
+    if (isClockedIn) {
+      const res = await clockOutAction({ userId: operative.id });
+      setBusy(false);
+      if (res.ok) {
+        setBanner(`Clocked out ${operative.display_name}.`);
+        await fetchLatestFloor();
+        router.refresh();
+      } else {
+        setBanner(res.error || `Failed to clock out ${operative.display_name}.`);
+      }
+    } else {
+      const res = await clockInAction({ userId: operative.id });
+      setBusy(false);
+      if (res.ok) {
+        setBanner(`Clocked in ${operative.display_name}.`);
+        await fetchLatestFloor();
+        router.refresh();
+      } else {
+        setBanner(res.error || `Failed to clock in ${operative.display_name}.`);
+      }
+    }
+  };
+
+  const handleStopSingleEntry = async (entry: TimeEntry, opName: string) => {
+    const matchedTask = taskTypes.find((t) => t.id === entry.task_type_id);
+    const requiresUnits =
+      entry.require_units_on_close !== undefined
+        ? entry.require_units_on_close
+        : matchedTask?.require_units_on_close !== undefined
+          ? matchedTask.require_units_on_close
+          : entry.task_code !== 'STD-PICK' && entry.task_code !== 'STD-PACK';
+    if (!requiresUnits) {
+      setBusy(true);
+      await stopTaskAction({
+        entryId: entry.id,
+        units: entry.units ?? null,
+      });
+      setBusy(false);
+      setBanner(`Stopped running task "${entry.task_name}" for ${opName}.`);
+      await fetchLatestFloor();
+      router.refresh();
+      return;
+    }
+    if (entry.task_code === 'STD-GIN-CONT') {
+      setStopGoodsInUnitType('containers');
+    } else if (entry.task_code === 'STD-GIN-BOX') {
+      setStopGoodsInUnitType('boxes');
+    } else {
+      setStopGoodsInUnitType('pallets');
+    }
     setStopModalUnits(entry.units ? String(entry.units) : '');
     setStopModalTarget({ entry, opName });
   };
 
-  const confirmStopSingleEntryWithUnits = async (units: number | null | undefined) => {
+  const isGoodsInFloorEntry = (entry: TimeEntry | null | undefined) => {
+    if (!entry) return false;
+    const code = (entry.task_code || '').toUpperCase();
+    const name = (entry.task_name || '').toLowerCase();
+    return (
+      code === 'STD-GOODSIN' ||
+      code.startsWith('STD-GIN') ||
+      name.includes('goods in') ||
+      name.includes('goods-in')
+    );
+  };
+
+  const confirmStopSingleEntryWithUnits = async (
+    units: number | null | undefined,
+    zeroNote?: string | null
+  ) => {
     if (!stopModalTarget) return;
+    const isGoodsIn = isGoodsInFloorEntry(stopModalTarget.entry);
+    const variantCode =
+      stopGoodsInUnitType === 'containers'
+        ? 'STD-GIN-CONT'
+        : stopGoodsInUnitType === 'boxes'
+          ? 'STD-GIN-BOX'
+          : 'STD-GIN-PAL';
+    const overrideTask = isGoodsIn
+      ? taskTypes.find((t) => t.code === variantCode)
+      : undefined;
+    const goodsInTag =
+      isGoodsIn && units && units > 0
+        ? `[Goods In: ${units} ${
+            units === 1
+              ? stopGoodsInUnitType.replace(/e?s$/, '')
+              : stopGoodsInUnitType
+          }]`
+        : null;
+    const zeroReasonTag = zeroNote?.trim()
+      ? `[0 Units Reason: ${zeroNote.trim()}]`
+      : null;
+    const combinedNote =
+      [goodsInTag, zeroReasonTag].filter(Boolean).join(' · ') || undefined;
+
     setBusy(true);
     await stopTaskAction({
       entryId: stopModalTarget.entry.id,
       units,
+      note: combinedNote,
+      overrideTaskTypeId: overrideTask?.id || null,
     });
     setBusy(false);
+    const effectiveUnitLabel = isGoodsIn
+      ? stopGoodsInUnitType
+      : stopModalTarget.entry.unit_label || 'units';
     setBanner(
       `Stopped running task for ${stopModalTarget.opName}${
-        units !== null && units !== undefined ? ` (${units} ${stopModalTarget.entry.unit_label || 'units'})` : ''
+        units !== null && units !== undefined ? ` (${units} ${effectiveUnitLabel})` : ''
       }.`
     );
     setStopModalTarget(null);
     setStopZeroConfirmTarget(null);
+    setStopZeroReason('');
     await fetchLatestFloor();
     router.refresh();
   };
@@ -888,15 +1002,21 @@ export function FloorClient({
             </thead>
             <tbody className="divide-y divide-slate-800 text-[13px]">
               {(() => {
-                const primaryRows = rows.filter(
+                const sortedRows = [...rows].sort((a, b) => {
+                  const pa = getStaffPriorityRank(a.operative);
+                  const pb = getStaffPriorityRank(b.operative);
+                  if (pa !== pb) return pa - pb;
+                  return a.operative.display_name.localeCompare(b.operative.display_name);
+                });
+                const primaryRows = sortedRows.filter(
                   (r) =>
-                    Boolean(r.operative.is_core_warehouse) ||
+                    isPrimaryStaffMember(r.operative) ||
                     Boolean(r.attendance) ||
                     Boolean(r.runningEntry)
                 );
-                const otherRows = rows.filter(
+                const otherRows = sortedRows.filter(
                   (r) =>
-                    !r.operative.is_core_warehouse &&
+                    !isPrimaryStaffMember(r.operative) &&
                     !r.attendance &&
                     !r.runningEntry
                 );
@@ -1085,7 +1205,7 @@ export function FloorClient({
                       </td>
 
                       <td className="py-4 px-4 text-right">
-                        <div className="inline-flex items-center justify-end gap-2">
+                        <div className="inline-flex flex-wrap items-center justify-end gap-2">
                           {resumableCrew && (
                             <button
                               type="button"
@@ -1121,6 +1241,29 @@ export function FloorClient({
                               Stop
                             </button>
                           )}
+                          {isClockedIn || isRunning ? (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => handleToggleClockInOut(operative, true)}
+                              className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-rose-950/80 text-slate-300 hover:text-rose-200 border border-slate-700 hover:border-rose-500/40 text-xs font-bold inline-flex items-center gap-1.5 transition"
+                              title={`1-Click Clock Out ${operative.display_name}`}
+                            >
+                              <Clock className="w-3.5 h-3.5 text-rose-400" />
+                              Clock Out
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => handleToggleClockInOut(operative, false)}
+                              className="px-3 py-2 rounded-lg bg-emerald-500/15 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/40 text-xs font-black inline-flex items-center gap-1.5 transition"
+                              title={`1-Click Clock In ${operative.display_name}`}
+                            >
+                              <Clock className="w-3.5 h-3.5" />
+                              Clock In
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1139,16 +1282,55 @@ export function FloorClient({
                             className="w-full px-4 py-3 flex items-center justify-between text-xs font-black uppercase tracking-wider text-slate-300 hover:text-white hover:bg-slate-800/60 transition"
                           >
                             <span>
-                              {showOtherFloorStaff ? '▾ Hide' : '▸ Show'} Other Team Members ({otherRows.length} off-shift support staff)
+                              {showOtherFloorStaff ? '▾ Hide' : '▸ Show'} Additional Staff Members ({otherRows.length} — Grouped by Department / Role)
                             </span>
-                            <span className="text-[11px] font-semibold normal-case text-slate-400">
-                              {otherRows.map((r) => r.operative.display_name).join(', ')}
+                            <span className="text-[11px] font-semibold normal-case text-sky-400">
+                              Click to {showOtherFloorStaff ? 'collapse' : 'expand'} groups
                             </span>
                           </button>
                         </td>
                       </tr>
                     )}
-                    {showOtherFloorStaff && otherRows.map(renderFloorRow)}
+                    {showOtherFloorStaff &&
+                      ADDITIONAL_GROUP_ORDER.map((deptLabel) => {
+                        const deptRows = otherRows.filter(
+                          (r) => getAdditionalStaffGroupLabel(r.operative) === deptLabel
+                        );
+                        if (deptRows.length === 0) return null;
+                        const isDeptOpen = expandedFloorDepts[deptLabel] ?? true;
+
+                        return (
+                          <React.Fragment key={deptLabel}>
+                            <tr className="bg-slate-900/95">
+                              <td colSpan={7} className="p-0">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setExpandedFloorDepts((prev) => ({
+                                      ...prev,
+                                      [deptLabel]: !isDeptOpen,
+                                    }))
+                                  }
+                                  className="w-full px-5 py-2.5 flex items-center justify-between text-left hover:bg-slate-800/70 transition border-l-[3px] border-l-amber-400"
+                                >
+                                  <span className="text-xs font-black uppercase tracking-wider text-amber-300">
+                                    {deptLabel} ({deptRows.length})
+                                  </span>
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-400">
+                                    {deptRows.map((r) => r.operative.display_name).join(', ')}
+                                    <ChevronDown
+                                      className={`w-3.5 h-3.5 transition-transform ${
+                                        isDeptOpen ? 'rotate-180' : ''
+                                      }`}
+                                    />
+                                  </span>
+                                </button>
+                              </td>
+                            </tr>
+                            {isDeptOpen && deptRows.map(renderFloorRow)}
+                          </React.Fragment>
+                        );
+                      })}
                   </>
                 );
               })()}
@@ -1182,8 +1364,21 @@ export function FloorClient({
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
                 1. Pick Operatives ({selectedOperativeIds.length} selected)
               </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {rows.map(({ operative, runningEntry }) => {
+              {(() => {
+                const sortedCrewRows = [...rows].sort((a, b) => {
+                  const pa = getStaffPriorityRank(a.operative);
+                  const pb = getStaffPriorityRank(b.operative);
+                  if (pa !== pb) return pa - pb;
+                  return a.operative.display_name.localeCompare(b.operative.display_name);
+                });
+                const primaryCrewRows = sortedCrewRows.filter((r) =>
+                  isPrimaryStaffMember(r.operative)
+                );
+                const additionalCrewRows = sortedCrewRows.filter(
+                  (r) => !isPrimaryStaffMember(r.operative)
+                );
+
+                const renderCrewOption = ({ operative, runningEntry }: FloorRow) => {
                   const checked = selectedOperativeIds.includes(operative.id);
                   return (
                     <label
@@ -1201,7 +1396,16 @@ export function FloorClient({
                         className="w-5 h-5 rounded accent-emerald-500"
                       />
                       <div>
-                        <div className="font-bold text-sm">{operative.display_name}</div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-sm">{operative.display_name}</span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded border text-[9px] font-bold ${getRoleBadgeClass(
+                              operative.job_title
+                            )}`}
+                          >
+                            {operative.job_title || operative.role}
+                          </span>
+                        </div>
                         <div className="text-[11px] text-slate-400">
                           {runningEntry
                             ? `Currently on ${runningEntry.client_code} · ${runningEntry.task_name}`
@@ -1210,8 +1414,74 @@ export function FloorClient({
                       </div>
                     </label>
                   );
-                })}
-              </div>
+                };
+
+                return (
+                  <div className="space-y-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {primaryCrewRows.map(renderCrewOption)}
+                    </div>
+                    {additionalCrewRows.length > 0 && (
+                      <div className="rounded-xl border border-slate-800 bg-slate-950/60 overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setShowOtherFloorStaff((prev) => !prev)}
+                          className="w-full px-3.5 py-2.5 flex items-center justify-between text-left hover:bg-slate-800/60 transition"
+                        >
+                          <span className="text-xs font-black uppercase tracking-wider text-slate-300">
+                            {showOtherFloorStaff ? '▾ Hide' : '▸ Show'} Additional Staff Members ({additionalCrewRows.length})
+                          </span>
+                          <span className="text-[10px] text-sky-400 font-bold">
+                            Grouped by Department / Role
+                          </span>
+                        </button>
+                        {showOtherFloorStaff && (
+                          <div className="p-2.5 pt-1 space-y-2 border-t border-slate-800">
+                            {ADDITIONAL_GROUP_ORDER.map((deptLabel) => {
+                              const deptRows = additionalCrewRows.filter(
+                                (r) => getAdditionalStaffGroupLabel(r.operative) === deptLabel
+                              );
+                              if (deptRows.length === 0) return null;
+                              const isDeptOpen = expandedFloorDepts[deptLabel] ?? true;
+                              return (
+                                <div
+                                  key={deptLabel}
+                                  className="rounded-lg border border-slate-800 bg-slate-900/60 overflow-hidden"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setExpandedFloorDepts((prev) => ({
+                                        ...prev,
+                                        [deptLabel]: !isDeptOpen,
+                                      }))
+                                    }
+                                    className="w-full px-3 py-1.5 flex items-center justify-between text-left bg-slate-950/70 hover:bg-slate-800 transition"
+                                  >
+                                    <span className="text-[11px] font-black uppercase tracking-wider text-amber-300">
+                                      {deptLabel} ({deptRows.length})
+                                    </span>
+                                    <ChevronDown
+                                      className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
+                                        isDeptOpen ? 'rotate-180' : ''
+                                      }`}
+                                    />
+                                  </button>
+                                  {isDeptOpen && (
+                                    <div className="p-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                      {deptRows.map(renderCrewOption)}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1375,7 +1645,11 @@ export function FloorClient({
                   Stopping Task ({stopModalTarget.opName})
                 </div>
                 <h3 className="text-xl font-black text-white mt-0.5">
-                  Declare Quantity Completed ({stopModalTarget.entry.unit_label || 'units'})
+                  Declare Quantity Completed (
+                  {isGoodsInFloorEntry(stopModalTarget.entry)
+                    ? stopGoodsInUnitType
+                    : stopModalTarget.entry.unit_label || 'units'}
+                  )
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {stopModalTarget.entry.client_code} · {stopModalTarget.entry.task_name}
@@ -1390,9 +1664,43 @@ export function FloorClient({
               </button>
             </div>
 
+            {isGoodsInFloorEntry(stopModalTarget.entry) && (
+              <div className="p-3 rounded-xl bg-sky-950/35 border border-sky-500/40 space-y-2">
+                <div className="text-[11px] font-black uppercase tracking-wider text-sky-300">
+                  Select Goods-In Unit Type Completed (e.g. 1 Container or 5 Pallets):
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      { key: 'containers', label: '📦 Containers' },
+                      { key: 'pallets', label: '🪵 Pallets' },
+                      { key: 'boxes', label: '📫 Boxes' },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => setStopGoodsInUnitType(opt.key)}
+                      className={`py-2 px-2 rounded-xl border text-xs font-black transition ${
+                        stopGoodsInUnitType === opt.key
+                          ? 'bg-sky-500 text-slate-950 border-sky-300 shadow'
+                          : 'bg-slate-950 text-sky-200 border-sky-500/35 hover:bg-slate-900'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                How many {stopModalTarget.entry.unit_label || 'units'} were completed? *
+                How many{' '}
+                {isGoodsInFloorEntry(stopModalTarget.entry)
+                  ? stopGoodsInUnitType
+                  : stopModalTarget.entry.unit_label || 'units'}{' '}
+                were completed? *
               </label>
               <input
                 type="number"
@@ -1401,7 +1709,11 @@ export function FloorClient({
                 autoFocus
                 value={stopModalUnits}
                 onChange={(e) => setStopModalUnits(e.target.value)}
-                placeholder={`Enter ${stopModalTarget.entry.unit_label || 'units'} count (e.g. 25)`}
+                placeholder={`Enter ${
+                  isGoodsInFloorEntry(stopModalTarget.entry)
+                    ? stopGoodsInUnitType
+                    : stopModalTarget.entry.unit_label || 'units'
+                } count (e.g. 5)`}
                 className="w-full h-14 px-4 rounded-xl bg-slate-950 border-2 border-emerald-500/60 text-2xl font-black font-mono text-white focus:outline-none focus:border-emerald-400"
               />
             </div>
@@ -1543,6 +1855,27 @@ export function FloorClient({
               Recording 0 units will exclude this time from pace averages and flag it as a Zero-Productivity run for Manager Review.
             </div>
 
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-rose-300">
+                  Explain why zero productivity was recorded
+                </label>
+                <VoiceMicButton
+                  size="sm"
+                  onTranscript={(spoken) =>
+                    setStopZeroReason((prev) => appendTranscript(prev, spoken))
+                  }
+                />
+              </div>
+              <textarea
+                rows={2}
+                value={stopZeroReason}
+                onChange={(e) => setStopZeroReason(e.target.value)}
+                placeholder="Type or press Speak to explain why 0 units were completed..."
+                className="w-full p-2.5 rounded-xl bg-slate-950 border border-rose-500/50 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-400"
+              />
+            </div>
+
             <div className="grid grid-cols-2 gap-3 pt-1">
               <button
                 type="button"
@@ -1557,7 +1890,7 @@ export function FloorClient({
                 disabled={busy}
                 onClick={() => {
                   if (stopZeroConfirmTarget.kind === 'single') {
-                    confirmStopSingleEntryWithUnits(0);
+                    confirmStopSingleEntryWithUnits(0, stopZeroReason);
                   } else {
                     confirmStopCrewWithUnits(0);
                   }
@@ -1615,11 +1948,44 @@ export function FloorClient({
                   <option value="OPEN_POOL">
                     📢 OPEN TASK POOL — Any Available Operative Can Grab (Grab App Mode)
                   </option>
-                  {rows.map(({ operative }) => (
-                    <option key={operative.id} value={operative.id}>
-                      {operative.display_name}
-                    </option>
-                  ))}
+                  {(() => {
+                    const sortedOps = [...rows]
+                      .map((r) => r.operative)
+                      .sort((a, b) => {
+                        const pa = getStaffPriorityRank(a);
+                        const pb = getStaffPriorityRank(b);
+                        if (pa !== pb) return pa - pb;
+                        return a.display_name.localeCompare(b.display_name);
+                      });
+                    const primaryOps = sortedOps.filter((op) => isPrimaryStaffMember(op));
+                    const additionalOps = sortedOps.filter((op) => !isPrimaryStaffMember(op));
+                    return (
+                      <>
+                        <optgroup label="⭐ Supervisors (Mark & Edna) & Core Warehouse">
+                          {primaryOps.map((op) => (
+                            <option key={op.id} value={op.id}>
+                              {op.display_name} — {op.job_title || op.role}
+                            </option>
+                          ))}
+                        </optgroup>
+                        {ADDITIONAL_GROUP_ORDER.map((deptLabel) => {
+                          const deptMembers = additionalOps.filter(
+                            (op) => getAdditionalStaffGroupLabel(op) === deptLabel
+                          );
+                          if (deptMembers.length === 0) return null;
+                          return (
+                            <optgroup key={deptLabel} label={`Additional Staff — ${deptLabel}`}>
+                              {deptMembers.map((op) => (
+                                <option key={op.id} value={op.id}>
+                                  {op.display_name} — {op.job_title || op.role}
+                                </option>
+                              ))}
+                            </optgroup>
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
                 </select>
               </div>
 
@@ -1685,9 +2051,17 @@ export function FloorClient({
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
-                  Supervisor Priority Note (Shown on Operative&apos;s Screen)
-                </label>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Supervisor Priority Note (Shown on Operative&apos;s Screen)
+                  </label>
+                  <VoiceMicButton
+                    size="sm"
+                    onTranscript={(spoken) =>
+                      setAssignPriorityNote((prev) => appendTranscript(prev, spoken))
+                    }
+                  />
+                </div>
                 <input
                   type="text"
                   value={assignPriorityNote}

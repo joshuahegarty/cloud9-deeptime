@@ -2,11 +2,18 @@
 
 import { kioskTapOperativeAction, loginByPinAction } from '@/app/actions';
 import { formatElapsedHMS, formatLondonTime } from '@/lib/calculations';
-import { getRoleBadgeClass } from '@/lib/roleBadge';
+import {
+  ADDITIONAL_GROUP_ORDER,
+  getAdditionalStaffGroupLabel,
+  getRoleBadgeClass,
+  getStaffPriorityRank,
+  isPrimaryStaffMember,
+} from '@/lib/roleBadge';
 import { Attendance, TimeEntry, UserPublic } from '@/lib/types';
 import {
   ArrowRight,
   CheckCircle2,
+  ChevronDown,
   Clock,
   Delete,
   KeyRound,
@@ -38,6 +45,7 @@ export function KioskClient({ rows }: { rows: KioskRow[] }) {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<'grid' | 'pin'>('grid');
   const [showOtherKioskStaff, setShowOtherKioskStaff] = useState(false);
+  const [expandedKioskDepts, setExpandedKioskDepts] = useState<Record<string, boolean>>({});
   const [requirePinOnTap, setRequirePinOnTap] = useState(false);
   const [pinModalUser, setPinModalUser] = useState<UserPublic | null>(null);
   const [pin, setPin] = useState('');
@@ -228,15 +236,21 @@ export function KioskClient({ rows }: { rows: KioskRow[] }) {
       {viewMode === 'grid' ? (
         <div className="space-y-5">
           {(() => {
-            const primaryRows = rows.filter(
+            const sortedRows = [...rows].sort((a, b) => {
+              const pa = getStaffPriorityRank(a.operative);
+              const pb = getStaffPriorityRank(b.operative);
+              if (pa !== pb) return pa - pb;
+              return a.operative.display_name.localeCompare(b.operative.display_name);
+            });
+            const primaryRows = sortedRows.filter(
               (r) =>
-                Boolean(r.operative.is_core_warehouse) ||
+                isPrimaryStaffMember(r.operative) ||
                 Boolean(r.attendance) ||
                 Boolean(r.runningEntry)
             );
-            const otherRows = rows.filter(
+            const otherRows = sortedRows.filter(
               (r) =>
-                !r.operative.is_core_warehouse &&
+                !isPrimaryStaffMember(r.operative) &&
                 !r.attendance &&
                 !r.runningEntry
             );
@@ -390,15 +404,53 @@ export function KioskClient({ rows }: { rows: KioskRow[] }) {
                       className="w-full px-5 py-4 flex flex-wrap items-center justify-between gap-2 text-left hover:bg-slate-800/60 transition"
                     >
                       <span className="text-sm font-black uppercase tracking-wider text-slate-200">
-                        {showOtherKioskStaff ? '▾ Hide' : '▸ Show'} Other Team Members ({otherRows.length})
+                        {showOtherKioskStaff ? '▾ Hide' : '▸ Show'} Additional Staff Members ({otherRows.length})
                       </span>
-                      <span className="text-xs text-slate-400 font-semibold">
-                        {otherRows.map((r) => r.operative.display_name).join(', ')}
+                      <span className="text-xs text-sky-400 font-semibold">
+                        Grouped by Department / Job Title
                       </span>
                     </button>
                     {showOtherKioskStaff && (
-                      <div className="p-5 pt-2 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                        {otherRows.map(renderKioskCard)}
+                      <div className="p-5 pt-2 border-t border-slate-800 space-y-4">
+                        {ADDITIONAL_GROUP_ORDER.map((deptLabel) => {
+                          const deptRows = otherRows.filter(
+                            (r) => getAdditionalStaffGroupLabel(r.operative) === deptLabel
+                          );
+                          if (deptRows.length === 0) return null;
+                          const isDeptOpen = expandedKioskDepts[deptLabel] ?? true;
+
+                          return (
+                            <div
+                              key={deptLabel}
+                              className="rounded-2xl border border-slate-800 bg-slate-950/60 overflow-hidden"
+                            >
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedKioskDepts((prev) => ({
+                                    ...prev,
+                                    [deptLabel]: !isDeptOpen,
+                                  }))
+                                }
+                                className="w-full px-4 py-3 bg-slate-900/80 flex items-center justify-between text-left hover:bg-slate-800 transition"
+                              >
+                                <span className="text-xs font-black uppercase tracking-wider text-amber-300">
+                                  {deptLabel} ({deptRows.length})
+                                </span>
+                                <ChevronDown
+                                  className={`w-4 h-4 text-slate-400 transition-transform ${
+                                    isDeptOpen ? 'rotate-180' : ''
+                                  }`}
+                                />
+                              </button>
+                              {isDeptOpen && (
+                                <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                  {deptRows.map(renderKioskCard)}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

@@ -72,6 +72,7 @@ import {
   resolveBillingStatus,
 } from '@/lib/billingStatus';
 import { REEL_LETTERS, ReelLetter } from '@/components/AlphabeticalReelWheel';
+import { appendTranscript, VoiceMicButton } from '@/components/VoiceMicButton';
 import { useRouter, useSearchParams } from 'next/navigation';
 import React, { useEffect, useMemo, useState } from 'react';
 
@@ -135,6 +136,26 @@ export function NowClient({
   );
   const [favouriteKeys, setFavouriteKeys] = useState<string[]>([]);
   const [openProjectFolders, setOpenProjectFolders] = useState<Record<string, boolean>>({});
+  const [expandedTaskSections, setExpandedTaskSections] = useState<{
+    standard: boolean;
+    bespoke: boolean;
+    projects: boolean;
+    housekeeping: boolean;
+  }>({
+    standard: false,
+    bespoke: false,
+    projects: false,
+    housekeeping: false,
+  });
+
+  const toggleTaskSection = (
+    key: 'standard' | 'bespoke' | 'projects' | 'housekeeping'
+  ) => {
+    setExpandedTaskSections((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
   const [targetNotApplicable, setTargetNotApplicable] = useState(false);
 
   useEffect(() => {
@@ -172,6 +193,29 @@ export function NowClient({
   // Live elapsed timer
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [idleSecondsSinceActivity, setIdleSecondsSinceActivity] = useState(0);
+  const [nowClockMs, setNowClockMs] = useState<number>(() => Date.now());
+  const [tallyUndoStack, setTallyUndoStack] = useState<
+    Array<{ entryId: string; previousUnits: number; label: string }>
+  >([]);
+
+  useEffect(() => {
+    const t = setInterval(() => setNowClockMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const formatCompactDuration = (totalSecs: number) => {
+    const secs = Math.max(0, Math.floor(totalSecs));
+    const hrs = Math.floor(secs / 3600);
+    const mins = Math.floor((secs % 3600) / 60);
+    const remSecs = secs % 60;
+    if (hrs > 0) {
+      return `${hrs}h ${mins}m ${remSecs}s`;
+    }
+    if (mins > 0) {
+      return `${mins}m ${remSecs}s`;
+    }
+    return `${remSecs}s`;
+  };
 
   // Multi-Client / Consolidated 3PL definition
   const MULTI_CLIENT_ID = '10000000-0000-0000-0000-000000000000';
@@ -261,6 +305,9 @@ export function NowClient({
   const [showConfirmSwitchModal, setShowConfirmSwitchModal] = useState(false);
   const [showStopUnitsModal, setShowStopUnitsModal] = useState(false);
   const [stopUnitsValue, setStopUnitsValue] = useState('');
+  const [stopGoodsInUnitType, setStopGoodsInUnitType] = useState<
+    'pallets' | 'containers' | 'boxes'
+  >('pallets');
   const [stopIsMistake, setStopIsMistake] = useState(false);
   const [stopMistakeReason, setStopMistakeReason] = useState('');
   const [showWrongTaskModal, setShowWrongTaskModal] = useState(false);
@@ -270,6 +317,8 @@ export function NowClient({
   const [clockOutAfterStop, setClockOutAfterStop] = useState(false);
   const [showZeroActivityConfirmModal, setShowZeroActivityConfirmModal] = useState(false);
   const [pendingZeroUnitsValue, setPendingZeroUnitsValue] = useState<number | null>(null);
+  const [zeroProductivityReason, setZeroProductivityReason] = useState<string>('');
+  const [below75Explanation, setBelow75Explanation] = useState<string>('');
   const [pendingSwitchAction, setPendingSwitchAction] = useState<
     | {
         kind: 'catalogue';
@@ -505,7 +554,12 @@ export function NowClient({
   const housekeepingTasks = useMemo(
     () =>
       taskTypes
-        .filter((t) => isHousekeepingOrInternal(t))
+        .filter(
+          (t) =>
+            isHousekeepingOrInternal(t) &&
+            t.code !== 'SCA-REPL' &&
+            t.active !== false
+        )
         .sort((a, b) => (a.sort_order ?? 99) - (b.sort_order ?? 99)),
     [taskTypes]
   );
@@ -529,27 +583,91 @@ export function NowClient({
   // Prominent 30-Minute "Resume Last Task" lookup when No Task Running (Item #8)
   const lastStoppedWithin30Mins = useMemo(() => {
     if (runningEntry) return null;
-    const nowMs = Date.now();
     for (const entry of todayEntries) {
       if (!entry.ended_at) continue;
       if (entry.note && entry.note.startsWith('[MISTAKE]')) continue;
       const endedMs = new Date(entry.ended_at).getTime();
-      const diffMins = (nowMs - endedMs) / 60000;
+      const diffSecs = Math.max(0, Math.floor((nowClockMs - endedMs) / 1000));
+      const diffMins = diffSecs / 60;
       if (diffMins >= 0 && diffMins <= 30) {
         const matchedTask = taskTypes.find((t) => t.id === entry.task_type_id);
         const matchedClient = effectiveClients.find((c) => c.id === entry.client_id);
         if (matchedTask && matchedClient) {
+          let priorSeconds = 0;
+          for (const e of todayEntries) {
+            if (!e.ended_at) continue;
+            if (e.note && e.note.startsWith('[MISTAKE]')) continue;
+            if (e.client_id === entry.client_id && e.task_type_id === entry.task_type_id) {
+              const s = new Date(e.started_at).getTime();
+              const end = new Date(e.ended_at).getTime();
+              if (end > s) {
+                priorSeconds += Math.floor((end - s) / 1000);
+              }
+            }
+          }
           return {
             entry,
             task: matchedTask,
             client: matchedClient,
             minutesAgo: Math.max(1, Math.round(diffMins)),
+            secondsSincePaused: diffSecs,
+            priorSecondsToday: priorSeconds,
           };
         }
       }
     }
     return null;
-  }, [runningEntry, todayEntries, taskTypes, effectiveClients]);
+  }, [runningEntry, todayEntries, taskTypes, effectiveClients, nowClockMs]);
+
+  // Prior recorded task history today for the currently running task (shows previous duration + time since last paused)
+  const runningTaskPriorHistory = useMemo(() => {
+    if (!runningEntry) return null;
+    const completedMatching = todayEntries.filter((e) => {
+      if (!e.ended_at || e.id === runningEntry.id) return false;
+      if (e.note && e.note.startsWith('[MISTAKE]')) return false;
+      const sameClient = e.client_id === runningEntry.client_id;
+      const sameTask =
+        runningEntry.task_type_id === 'unlisted'
+          ? e.task_name === runningEntry.task_name
+          : e.task_type_id === runningEntry.task_type_id;
+      return sameClient && sameTask;
+    });
+    if (completedMatching.length === 0) return null;
+
+    let priorSeconds = 0;
+    let latestEndedMs = 0;
+    let priorUnits = 0;
+    for (const e of completedMatching) {
+      const s = new Date(e.started_at).getTime();
+      const end = new Date(e.ended_at!).getTime();
+      if (end > s) {
+        priorSeconds += Math.floor((end - s) / 1000);
+      }
+      if (end > latestEndedMs) {
+        latestEndedMs = end;
+      }
+      if (e.units && e.units > 0) {
+        priorUnits += Number(e.units);
+      }
+    }
+    const currentStartMs = new Date(runningEntry.started_at).getTime();
+    const pausedGapSeconds =
+      latestEndedMs > 0
+        ? Math.max(0, Math.floor((currentStartMs - latestEndedMs) / 1000))
+        : 0;
+    const secondsSincePausedLive =
+      latestEndedMs > 0
+        ? Math.max(0, Math.floor((nowClockMs - latestEndedMs) / 1000))
+        : 0;
+
+    return {
+      sessionCount: completedMatching.length,
+      priorSeconds,
+      pausedGapSeconds,
+      secondsSincePausedLive,
+      priorUnits,
+    };
+  }, [runningEntry, todayEntries, nowClockMs]);
 
   const standardTasks = useMemo(
     () =>
@@ -557,8 +675,17 @@ export function NowClient({
         .filter(
           (t) =>
             Boolean(t.is_standard) &&
+            t.active !== false &&
             !isHousekeepingOrInternal(t) &&
-            !['STD-GIN-CONT', 'STD-GIN-PAL', 'STD-GIN-BOX'].includes(t.code) &&
+            ![
+              'STD-GIN-CONT',
+              'STD-GIN-PAL',
+              'STD-GIN-BOX',
+              'STD-DISPATCH',
+              'STD-PALLET-BW',
+              'STD-KITTING',
+              'STD-LOAD',
+            ].includes(t.code) &&
             (selectedCategoryFilter === 'ALL' ||
               (t.category || 'Fulfilment') === selectedCategoryFilter)
         )
@@ -620,7 +747,9 @@ export function NowClient({
     targetClient: Client,
     orderRefValue?: string | null,
     unitsValue?: number | null,
-    previousUnits?: number | null
+    previousUnits?: number | null,
+    previousNote?: string | null,
+    previousTaskTypeId?: string | null
   ) => {
     if (busy) return;
     const nowIso = new Date().toISOString();
@@ -633,6 +762,8 @@ export function NowClient({
       orderRef: orderRefValue?.trim() || null,
       units: unitsValue ?? null,
       previousUnits,
+      previousNote: previousNote?.trim() || null,
+      previousTaskTypeId: previousTaskTypeId || null,
       source,
       startedAt: nowIso,
       userId: user.id,
@@ -735,7 +866,37 @@ export function NowClient({
     return true;
   };
 
-  // Direct 1-tap Task Start (or via Confirm Modal when orderRef / barcode scan is used)
+  const isReworkTask = (t: TaskType) =>
+    t.code === 'STD-REWORK' || t.name.trim().toLowerCase() === 'rework';
+
+  const isGoodsInRunningEntry = (entry: TimeEntry | null) => {
+    if (!entry) return false;
+    const code = (entry.task_code || '').toUpperCase();
+    const name = (entry.task_name || '').toLowerCase();
+    return (
+      code === 'STD-GOODSIN' ||
+      code.startsWith('STD-GIN') ||
+      name.includes('goods in') ||
+      name.includes('goods-in')
+    );
+  };
+
+  const resolveGoodsInVariantTask = (
+    unitType: 'pallets' | 'containers' | 'boxes'
+  ): TaskType | undefined => {
+    if (unitType === 'containers') {
+      return taskTypes.find((t) => t.code === 'STD-GIN-CONT');
+    }
+    if (unitType === 'boxes') {
+      return taskTypes.find((t) => t.code === 'STD-GIN-BOX');
+    }
+    return (
+      taskTypes.find((t) => t.code === 'STD-GIN-PAL') ||
+      taskTypes.find((t) => t.code === 'STD-GOODSIN')
+    );
+  };
+
+  // Direct 1-tap Task Start (or via Confirm Modal when orderRef / barcode scan / Rework description is used)
   const executeStartTask = async (
     task: TaskType,
     source: EntrySource,
@@ -749,6 +910,12 @@ export function NowClient({
       (task.client_id ? clients.find((c) => c.id === task.client_id) : undefined) ??
       selectedClient;
     if (!targetClient) return;
+
+    // Require a mandatory description when starting Rework
+    if (isReworkTask(task) && !orderRefValue?.trim()) {
+      openConfirmStart(task, source, targetClient);
+      return;
+    }
 
     // If a task is currently running, first ask the operative to confirm ending the running task and switching
     if (runningEntry) {
@@ -783,6 +950,13 @@ export function NowClient({
     }
     setShowConfirmSwitchModal(false);
     if (doesRunningTaskRequireUnits(runningEntry)) {
+      if (runningEntry.task_code === 'STD-GIN-CONT') {
+        setStopGoodsInUnitType('containers');
+      } else if (runningEntry.task_code === 'STD-GIN-BOX') {
+        setStopGoodsInUnitType('boxes');
+      } else {
+        setStopGoodsInUnitType('pallets');
+      }
       setStopUnitsValue(runningEntry.units ? String(runningEntry.units) : '');
       setShowStopUnitsModal(true);
       return;
@@ -809,6 +983,10 @@ export function NowClient({
   const handleConfirmAndStart = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!confirmStartModal || busy) return;
+    if (isReworkTask(confirmStartModal.task) && !orderRefInput.trim()) {
+      setFeedback('Please enter a description of the rework being performed.');
+      return;
+    }
     const parsedUnits =
       initialUnitsInput.trim() !== '' ? parseInt(initialUnitsInput.trim(), 10) : null;
     await executeStartTask(
@@ -831,7 +1009,9 @@ export function NowClient({
       billingStatus: BillingStatus;
       unbilledReason: string | null;
     },
-    previousUnits?: number | null
+    previousUnits?: number | null,
+    previousNote?: string | null,
+    previousTaskTypeId?: string | null
   ) => {
     setBusy(true);
     setFeedback(null);
@@ -842,6 +1022,8 @@ export function NowClient({
       orderRef: params.orderRef,
       unitLabel: params.unitLabel || 'units',
       previousUnits,
+      previousNote: previousNote?.trim() || null,
+      previousTaskTypeId: previousTaskTypeId || null,
       startedAt: new Date().toISOString(),
       userId: user.id,
       billingStatus: params.billingStatus,
@@ -968,17 +1150,19 @@ export function NowClient({
     e.preventDefault();
     if (!taskEditModal) return;
 
+    const isTargetEnabled =
+      !targetNotApplicable && (taskEditModal.target_enabled ?? true);
+
     const parsedStdMins =
-      !targetNotApplicable &&
       taskEditModal.standard_minutes !== null &&
       taskEditModal.standard_minutes !== undefined &&
       String(taskEditModal.standard_minutes) !== ''
         ? Number(taskEditModal.standard_minutes)
         : null;
 
-    if (!targetNotApplicable && (parsedStdMins === null || parsedStdMins <= 0)) {
+    if (isTargetEnabled && (parsedStdMins === null || parsedStdMins <= 0)) {
       setFeedback(
-        'Please enter a Target (Standard Mins / Unit) or tick "Target Not Applicable (N/A)".'
+        'Please enter a Target (Standard Mins / Unit) or toggle the Target OFF.'
       );
       return;
     }
@@ -1006,6 +1190,7 @@ export function NowClient({
           ? 0
           : Number(taskEditModal.min_charge_minutes),
       standardMinutes: parsedStdMins,
+      targetEnabled: isTargetEnabled,
       unitLabel: taskEditModal.unit_label || 'units',
       requireUnitsOnClose: taskEditModal.require_units_on_close ?? true,
       billingStatus:
@@ -1130,6 +1315,8 @@ export function NowClient({
 
     setStopIsMistake(false);
     setStopMistakeReason('');
+    setZeroProductivityReason('');
+    setBelow75Explanation('');
 
     if (!doesRunningTaskRequireUnits(runningEntry)) {
       if (andClockOut) {
@@ -1142,11 +1329,38 @@ export function NowClient({
 
     setPendingSwitchAction(null);
     setClockOutAfterStop(andClockOut);
+    if (runningEntry.task_code === 'STD-GIN-CONT') {
+      setStopGoodsInUnitType('containers');
+    } else if (runningEntry.task_code === 'STD-GIN-BOX') {
+      setStopGoodsInUnitType('boxes');
+    } else {
+      setStopGoodsInUnitType('pallets');
+    }
     setStopUnitsValue(runningEntry.units ? String(runningEntry.units) : '');
     setShowStopUnitsModal(true);
   };
 
-  const completeStopOrSwitchWithUnits = async (units: number | null | undefined) => {
+  const completeStopOrSwitchWithUnits = async (
+    units: number | null | undefined,
+    extraNote?: string | null
+  ) => {
+    const isGoodsIn = isGoodsInRunningEntry(runningEntry);
+    const goodsInVariant = isGoodsIn
+      ? resolveGoodsInVariantTask(stopGoodsInUnitType)
+      : undefined;
+    const overrideTaskTypeId = goodsInVariant?.id ?? null;
+    const goodsInTag =
+      isGoodsIn && units && units > 0
+        ? `[Goods In: ${units} ${
+            units === 1
+              ? stopGoodsInUnitType.replace(/e?s$/, '')
+              : stopGoodsInUnitType
+          }]`
+        : null;
+    const combinedExtraNote = [goodsInTag, extraNote?.trim()]
+      .filter(Boolean)
+      .join(' · ') || null;
+
     if (pendingSwitchAction) {
       if (pendingSwitchAction.kind === 'catalogue') {
         await performStartCatalogueTask(
@@ -1155,25 +1369,44 @@ export function NowClient({
           pendingSwitchAction.targetClient,
           pendingSwitchAction.orderRefValue,
           pendingSwitchAction.unitsValue,
-          units ?? null
+          units ?? null,
+          combinedExtraNote,
+          overrideTaskTypeId
         );
       } else {
-        await performStartUnlistedTask(pendingSwitchAction, units ?? null);
+        await performStartUnlistedTask(
+          pendingSwitchAction,
+          units ?? null,
+          combinedExtraNote,
+          overrideTaskTypeId
+        );
       }
       return;
     }
 
     if (clockOutAfterStop) {
-      await executeClockOut(units);
+      await executeClockOut(units, combinedExtraNote, overrideTaskTypeId);
     } else {
-      await executeStopTask(units, stopIsMistake, stopMistakeReason);
+      await executeStopTask(
+        units,
+        stopIsMistake,
+        stopMistakeReason,
+        combinedExtraNote,
+        overrideTaskTypeId,
+        isGoodsIn ? stopGoodsInUnitType : undefined,
+        goodsInVariant
+      );
     }
   };
 
   const executeStopTask = async (
     units: number | null | undefined,
     isMistakeFlag = false,
-    mistakeNote: string | null = null
+    mistakeNote: string | null = null,
+    extraNote: string | null = null,
+    overrideTaskTypeId: string | null = null,
+    overrideUnitLabel?: string,
+    overrideTask?: TaskType
   ) => {
     if (!runningEntry || busy) return;
     const nowIso = new Date().toISOString();
@@ -1187,6 +1420,32 @@ export function NowClient({
       userId: user.id,
       isMistake: isMistakeFlag,
       mistakeReason: mistakeNote,
+      note: extraNote?.trim() || null,
+      overrideTaskTypeId: overrideTaskTypeId || null,
+    };
+
+    const mergedNote = isMistakeFlag
+      ? `[MISTAKE] ${mistakeNote || 'Accidental start'}`
+      : extraNote?.trim()
+        ? runningEntry.note?.trim()
+          ? `${runningEntry.note.trim()} · ${extraNote.trim()}`
+          : extraNote.trim()
+        : runningEntry.note;
+
+    const stoppedSnapshot: TimeEntry = {
+      ...runningEntry,
+      task_type_id: overrideTask?.id || overrideTaskTypeId || runningEntry.task_type_id,
+      task_name: overrideTask?.name || runningEntry.task_name,
+      task_code: overrideTask?.code || runningEntry.task_code,
+      unit_label: overrideUnitLabel || overrideTask?.unit_label || runningEntry.unit_label,
+      standard_minutes:
+        overrideTask?.standard_minutes !== undefined
+          ? overrideTask.standard_minutes
+          : runningEntry.standard_minutes,
+      ended_at: nowIso,
+      units: isMistakeFlag ? 0 : units ?? runningEntry.units ?? null,
+      note: mergedNote,
+      updated_at: nowIso,
     };
 
     try {
@@ -1194,27 +1453,43 @@ export function NowClient({
         throw new Error('offline');
       }
       await stopTaskAction(payload);
+      setTodayEntries((prev) => [
+        stoppedSnapshot,
+        ...prev.filter((e) => e.id !== stoppedSnapshot.id),
+      ]);
       setRunningEntry(null);
       setShowStopUnitsModal(false);
       setStopIsMistake(false);
       setStopMistakeReason('');
+      setZeroProductivityReason('');
+      setBelow75Explanation('');
       if (isMistakeFlag) {
         setFeedback('Timer cancelled as accidental start — excluded from pace averages and client billing.');
       }
       router.refresh();
     } catch {
       await enqueueOfflineAction('stop_task', payload);
+      setTodayEntries((prev) => [
+        stoppedSnapshot,
+        ...prev.filter((e) => e.id !== stoppedSnapshot.id),
+      ]);
       setRunningEntry(null);
       setShowStopUnitsModal(false);
       setStopIsMistake(false);
       setStopMistakeReason('');
+      setZeroProductivityReason('');
+      setBelow75Explanation('');
       setFeedback('Task stop queued offline — will sync on reconnect.');
     } finally {
       setBusy(false);
     }
   };
 
-  const executeClockOut = async (units: number | null | undefined) => {
+  const executeClockOut = async (
+    units: number | null | undefined,
+    extraNote?: string | null,
+    overrideTaskTypeId?: string | null
+  ) => {
     if (busy) return;
     const nowIso = new Date().toISOString();
     setBusy(true);
@@ -1224,7 +1499,13 @@ export function NowClient({
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         throw new Error('offline');
       }
-      await clockOutAction({ userId: user.id, units, timestamp: nowIso });
+      await clockOutAction({
+        userId: user.id,
+        units,
+        note: extraNote?.trim() || null,
+        overrideTaskTypeId: overrideTaskTypeId || null,
+        timestamp: nowIso,
+      });
       setRunningEntry(null);
       setShowStopUnitsModal(false);
       if (isKioskMode) {
@@ -1237,6 +1518,7 @@ export function NowClient({
       await enqueueOfflineAction('clock_out', {
         userId: user.id,
         units,
+        note: extraNote?.trim() || null,
         timestamp: nowIso,
       });
       setRunningEntry(null);
@@ -1255,8 +1537,23 @@ export function NowClient({
     const nextUnits = isExact
       ? Math.max(0, Math.round(deltaOrExact))
       : Math.max(0, currentUnits + deltaOrExact);
+    if (nextUnits === currentUnits) return;
     const nowMs = Date.now();
     const nowIso = new Date(nowMs).toISOString();
+
+    const actionLabel = isExact
+      ? 'Reset'
+      : deltaOrExact > 0
+        ? `+${deltaOrExact}`
+        : `${deltaOrExact}`;
+    setTallyUndoStack((prev) => [
+      ...prev,
+      {
+        entryId: runningEntry.id,
+        previousUnits: currentUnits,
+        label: actionLabel,
+      },
+    ]);
 
     setLocalLastActivityMs(nowMs);
     setIdleSecondsSinceActivity(0);
@@ -1274,6 +1571,43 @@ export function NowClient({
         });
       } catch {
         // Ignore transient network errors — state is kept in runningEntry
+      }
+    }
+  };
+
+  const handleUndoLiveTally = async () => {
+    if (!runningEntry) return;
+    const matching = tallyUndoStack.filter((u) => u.entryId === runningEntry.id);
+    if (matching.length === 0) return;
+    const lastAction = matching[matching.length - 1];
+    const nowMs = Date.now();
+    const nowIso = new Date(nowMs).toISOString();
+
+    setTallyUndoStack((prev) => {
+      const idx = prev.map((u) => u.entryId).lastIndexOf(runningEntry.id);
+      if (idx === -1) return prev;
+      return [...prev.slice(0, idx), ...prev.slice(idx + 1)];
+    });
+
+    setLocalLastActivityMs(nowMs);
+    setIdleSecondsSinceActivity(0);
+    setRunningEntry({
+      ...runningEntry,
+      units: lastAction.previousUnits,
+      last_activity_at: nowIso,
+    });
+    setFeedback(
+      `Undid ${lastAction.label} — Live Tally restored to ${lastAction.previousUnits}.`
+    );
+
+    if (!runningEntry.id.startsWith('offline-') && !runningEntry.id.startsWith('running-')) {
+      try {
+        await updateRunningTaskUnitsAction({
+          entryId: runningEntry.id,
+          units: lastAction.previousUnits,
+        });
+      } catch {
+        // Ignore transient network errors
       }
     }
   };
@@ -1499,6 +1833,14 @@ export function NowClient({
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('c9-open-change-pin'))}
+                className="px-3 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-amber-300 border border-amber-500/40 text-xs font-black inline-flex items-center gap-1.5 transition"
+                title="Change your personal 4-digit sign-in PIN"
+              >
+                🔑 Change My PIN
+              </button>
+              <button
+                type="button"
                 onClick={() => setShowVoicePanel((prev) => !prev)}
                 className={`px-3.5 py-2 rounded-xl border text-xs font-black inline-flex items-center gap-1.5 transition ${
                   showVoicePanel || isVoiceListening
@@ -1661,85 +2003,147 @@ export function NowClient({
             </div>
 
             {/* Big Elapsed Timer Display */}
-            <div className="py-5 px-6 rounded-2xl bg-slate-950/90 border border-slate-800/90 text-center shadow-inner">
-              <div className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">
-                Elapsed Time
+            <div className="py-5 px-6 rounded-2xl bg-slate-950/90 border border-slate-800/90 text-center shadow-inner space-y-3">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">
+                  {runningTaskPriorHistory ? 'Current Session Timer (Fresh Run)' : 'Elapsed Time'}
+                </div>
+                <div
+                  className="text-5xl sm:text-7xl font-black font-mono tracking-wider text-white tabular-nums"
+                  data-testid="elapsed-timer"
+                >
+                  {formatElapsedHMS(elapsedSeconds)}
+                </div>
               </div>
-              <div
-                className="text-5xl sm:text-7xl font-black font-mono tracking-wider text-white tabular-nums"
-                data-testid="elapsed-timer"
-              >
-                {formatElapsedHMS(elapsedSeconds)}
-              </div>
+
+              {runningTaskPriorHistory && (
+                <div className="pt-3 border-t border-slate-800/90 flex flex-wrap items-center justify-center gap-2 sm:gap-3 text-xs">
+                  <span className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-bold inline-flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>
+                      <strong>{formatCompactDuration(runningTaskPriorHistory.priorSeconds)}</strong> already recorded in this task
+                    </span>
+                  </span>
+                  <span className="px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-300 font-bold inline-flex items-center gap-1.5">
+                    <RotateCcw className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>
+                      <strong>{formatCompactDuration(runningTaskPriorHistory.pausedGapSeconds)}</strong> since last paused
+                    </span>
+                  </span>
+                  <span className="px-3 py-1.5 rounded-xl bg-cyan-500/15 border border-cyan-500/40 text-cyan-200 font-mono font-black inline-flex items-center gap-1.5">
+                    <span>
+                      Total in Task: {formatElapsedHMS(runningTaskPriorHistory.priorSeconds + elapsedSeconds)}
+                    </span>
+                  </span>
+                </div>
+              )}
             </div>
 
-            {/* LIVE TALLY / BATCH LAP COUNTER (+1, +5, +10) */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-slate-950/85 border border-emerald-500/35 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3.5 text-center sm:text-left">
-                <div className="px-4 py-2.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 min-w-[92px] text-center">
-                  <div className="text-[10px] font-black uppercase tracking-wider text-emerald-300">
-                    Live Tally
+            {/* LIVE TALLY / BATCH LAP COUNTER (+1, +5, +10, Undo) — Hidden when production is synced via Dispatch Cloud Helm */}
+            {doesRunningTaskRequireUnits(runningEntry) ? (
+              <div className="p-4 sm:p-5 rounded-2xl bg-slate-950/85 border border-emerald-500/35 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5 text-center sm:text-left">
+                  <div className="px-4 py-2.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 min-w-[92px] text-center">
+                    <div className="text-[10px] font-black uppercase tracking-wider text-emerald-300">
+                      Live Tally
+                    </div>
+                    <div
+                      className="text-3xl font-black font-mono text-white tabular-nums leading-none mt-0.5"
+                      data-testid="live-tally-count"
+                    >
+                      {runningEntry.units ?? 0}
+                    </div>
                   </div>
-                  <div
-                    className="text-3xl font-black font-mono text-white tabular-nums leading-none mt-0.5"
-                    data-testid="live-tally-count"
-                  >
-                    {runningEntry.units ?? 0}
+                  <div>
+                    <div className="text-xs font-black uppercase tracking-wider text-emerald-400">
+                      Batch / Lap Counter ({runningEntry.unit_label || 'units'})
+                    </div>
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      Tap as you complete batches — pre-fills your final count when stopping.
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <div className="text-xs font-black uppercase tracking-wider text-emerald-400">
-                    Batch / Lap Counter ({runningEntry.unit_label || 'units'})
-                  </div>
-                  <div className="text-xs text-slate-400 mt-0.5">
-                    Tap as you complete batches — pre-fills your final count when stopping.
-                  </div>
-                </div>
-              </div>
 
-              <div className="flex flex-wrap items-center justify-center gap-2 w-full sm:w-auto">
-                <button
-                  type="button"
-                  onClick={() => handleAdjustLiveTally(-1)}
-                  disabled={(runningEntry.units ?? 0) <= 0}
-                  className="h-12 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 font-mono font-black text-base border border-slate-700 transition active:scale-95"
-                  title="Subtract 1"
-                >
-                  -1
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAdjustLiveTally(1)}
-                  className="h-12 px-4 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-mono font-black text-lg border border-emerald-500/50 shadow-sm transition active:scale-95"
-                >
-                  +1
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAdjustLiveTally(5)}
-                  className="h-12 px-4 rounded-xl bg-emerald-500/25 hover:bg-emerald-500/35 text-emerald-200 font-mono font-black text-lg border border-emerald-500/50 shadow-sm transition active:scale-95"
-                >
-                  +5
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAdjustLiveTally(10)}
-                  className="h-12 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-mono font-black text-lg shadow-md shadow-emerald-500/20 transition active:scale-95"
-                >
-                  +10
-                </button>
-                {(runningEntry.units ?? 0) > 0 && (
+                <div className="flex flex-wrap items-center justify-center gap-2 w-full sm:w-auto">
                   <button
                     type="button"
-                    onClick={() => handleAdjustLiveTally(0, true)}
-                    className="h-12 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white text-xs font-bold border border-slate-800 transition"
-                    title="Reset tally to 0"
+                    onClick={() => handleAdjustLiveTally(-1)}
+                    disabled={(runningEntry.units ?? 0) <= 0}
+                    className="h-12 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 font-mono font-black text-base border border-slate-700 transition active:scale-95"
+                    title="Subtract 1"
                   >
-                    Reset
+                    -1
                   </button>
-                )}
+                  <button
+                    type="button"
+                    onClick={() => handleAdjustLiveTally(1)}
+                    className="h-12 px-4 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-mono font-black text-lg border border-emerald-500/50 shadow-sm transition active:scale-95"
+                  >
+                    +1
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAdjustLiveTally(5)}
+                    className="h-12 px-4 rounded-xl bg-emerald-500/25 hover:bg-emerald-500/35 text-emerald-200 font-mono font-black text-lg border border-emerald-500/50 shadow-sm transition active:scale-95"
+                  >
+                    +5
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAdjustLiveTally(10)}
+                    className="h-12 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-mono font-black text-lg shadow-md shadow-emerald-500/20 transition active:scale-95"
+                  >
+                    +10
+                  </button>
+                  {(() => {
+                    const lastUndoForEntry = [...tallyUndoStack]
+                      .reverse()
+                      .find((u) => u.entryId === runningEntry.id);
+                    return (
+                      <button
+                        type="button"
+                        onClick={handleUndoLiveTally}
+                        disabled={!lastUndoForEntry}
+                        className={`h-12 px-3.5 rounded-xl border text-xs font-black uppercase tracking-wider inline-flex items-center gap-1.5 transition active:scale-95 ${
+                          lastUndoForEntry
+                            ? 'bg-amber-500/25 hover:bg-amber-500/35 text-amber-300 border-amber-500/60 shadow-sm'
+                            : 'bg-slate-900/80 text-slate-500 border-slate-800 cursor-not-allowed opacity-60'
+                        }`}
+                        title={
+                          lastUndoForEntry
+                            ? `Undo last tally action (${lastUndoForEntry.label})`
+                            : 'Undo last volume button tap'
+                        }
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>
+                          Undo{lastUndoForEntry ? ` (${lastUndoForEntry.label})` : ''}
+                        </span>
+                      </button>
+                    );
+                  })()}
+                  {(runningEntry.units ?? 0) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleAdjustLiveTally(0, true)}
+                      className="h-12 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white text-xs font-bold border border-slate-800 transition"
+                      title="Reset tally to 0"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="px-4 py-3 rounded-2xl bg-slate-950/80 border border-sky-500/30 flex items-center justify-between gap-3 text-xs text-sky-300 font-semibold">
+                <span>
+                  ⚡ Production quantity entry is turned off for <strong>{runningEntry.task_name}</strong> (order counts will sync via Dispatch Cloud Helm).
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-sky-500/15 border border-sky-500/30 font-mono text-[10px] font-black uppercase shrink-0">
+                  1-Tap Stop
+                </span>
+              </div>
+            )}
 
             {/* ONE BIG STOP BUTTON */}
             <button
@@ -1815,13 +2219,13 @@ export function NowClient({
                     </div>
                     <div className="min-w-0">
                       <div className="text-[10px] font-black uppercase tracking-wider text-slate-900/80">
-                        Stopped {lastStoppedWithin30Mins.minutesAgo}m ago · 1-Click Resume
+                        {formatCompactDuration(lastStoppedWithin30Mins.priorSecondsToday)} already recorded in this task · {formatCompactDuration(lastStoppedWithin30Mins.secondsSincePaused)} since last paused
                       </div>
                       <div className="text-base sm:text-lg font-black text-slate-950 truncate">
                         Resume {lastStoppedWithin30Mins.task.name}
                       </div>
                       <div className="text-xs font-bold text-slate-900/85 truncate">
-                        {lastStoppedWithin30Mins.client.name} ({lastStoppedWithin30Mins.client.code})
+                        {lastStoppedWithin30Mins.client.name} ({lastStoppedWithin30Mins.client.code}) · Starts fresh timer + keeps prior time
                       </div>
                     </div>
                   </div>
@@ -2611,94 +3015,91 @@ export function NowClient({
           </div>
         </section>
       ) : (
-        <div className="space-y-6">
-          {/* CONDUIT BAR 1: CONTEXT TO OPERATIONS FLOW CONNECTOR */}
-          <div className="relative py-2 flex items-center justify-center">
-            <div className="w-full border-t-2 border-slate-800/80" />
-            <div className="absolute px-4 py-1.5 rounded-full bg-slate-900 border border-teal-500/40 shadow-xl flex items-center gap-2 text-xs font-mono font-bold text-slate-300">
-              <span className="w-2 h-2 rounded-full bg-[#2DD4BF] animate-pulse" />
-              <span className="text-slate-400 uppercase">Target Context:</span>
-              <span className="text-[#2DD4BF]">
-                {isMultiClientSelected
-                  ? 'MULTI-CLIENT / CONSOLIDATED BATCH'
-                  : `[${selectedClient?.code}] ${selectedClient?.name?.toUpperCase()}`}
+        <div className="space-y-3.5">
+          {/* COMPACT HEADER HINT */}
+          <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+              <span className="px-2 py-0.5 rounded-lg bg-[#2DD4BF] text-slate-950 font-black tracking-wider">
+                STEP 2
               </span>
-              <span className="text-slate-600">│</span>
-              <span className="text-slate-400 text-[11px] font-sans">
-                Universal SOPs or Bespoke SOW:
+              <span>
+                Click any section bar below to expand tasks for{' '}
+                <strong className="text-[#2DD4BF]">
+                  {isMultiClientSelected
+                    ? 'Multi-Client / Consolidated'
+                    : `${selectedClient?.name} (${selectedClient?.code})`}
+                </strong>
               </span>
-              <ChevronDown className="w-3.5 h-3.5 text-teal-400" />
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setExpandedTaskSections({
+                    standard: true,
+                    bespoke: true,
+                    projects: true,
+                    housekeeping: true,
+                  })
+                }
+                className="text-[11px] font-bold text-slate-400 hover:text-white px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 transition"
+              >
+                Expand All
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setExpandedTaskSections({
+                    standard: false,
+                    bespoke: false,
+                    projects: false,
+                    housekeeping: false,
+                  })
+                }
+                className="text-[11px] font-bold text-slate-400 hover:text-white px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 transition"
+              >
+                Collapse All
+              </button>
             </div>
           </div>
 
-          {/* Category Filter Pills Toolbar */}
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-purple-950/20 border border-purple-500/30 border-l-[4px] border-l-[#A78BFA] space-y-2.5 shadow-md">
-            <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-purple-500/20">
-              <div className="flex items-center gap-2">
-                {isManagerOrAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNewCategoryName('');
-                      setShowAddCategoryModal(true);
-                    }}
-                    title="Add a Category"
-                    className="w-6 h-6 rounded-lg bg-[#A78BFA]/20 hover:bg-[#A78BFA] text-[#A78BFA] hover:text-slate-950 border border-[#A78BFA]/50 flex items-center justify-center transition shadow-sm"
-                  >
-                    <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                  </button>
-                )}
-                <span className="text-[13px] font-bold uppercase tracking-[1px] text-[#A78BFA] flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5 text-[#A78BFA]" />
-                  Category Filter
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {availableCategories.map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => setSelectedCategoryFilter(cat)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                    selectedCategoryFilter === cat
-                      ? 'bg-[#A78BFA] text-slate-950 shadow-md shadow-purple-500/20'
-                      : 'bg-slate-950 text-slate-300 hover:bg-slate-800 border border-slate-800'
-                  }`}
-                >
-                  {cat === 'ALL' ? 'All Categories' : cat}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* STATION 02A: UNIVERSAL STANDARD WAREHOUSE OPERATIONS */}
-          <section className="bg-[#071322] border-2 border-sky-500/40 border-l-[6px] border-l-[#0284C7] rounded-3xl p-5 sm:p-6 space-y-4 shadow-2xl">
-            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-sky-500/25">
-              <div className="flex items-center gap-2.5">
-                <span className="px-2.5 py-1 rounded-xl bg-[#0284C7] text-white flex items-center justify-center text-[12px] font-black tracking-wider shadow-sm">
-                  STEP 2A
-                </span>
-                <div>
-                  <h3 className="text-[17px] font-bold uppercase tracking-[1px] text-[#38BDF8] flex items-center gap-2">
-                    <Warehouse className="w-5 h-5 text-[#38BDF8]" />
-                    Universal Standard Warehouse Tasks
+          {/* 1. COLLAPSIBLE BAR: 2A · STANDARD WAREHOUSE TASKS */}
+          <section className="bg-[#071322] border-2 border-sky-500/40 border-l-[6px] border-l-[#0284C7] rounded-2xl overflow-hidden shadow-xl transition">
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => toggleTaskSection('standard')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  toggleTaskSection('standard');
+                }
+              }}
+              className="w-full px-4 sm:px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 cursor-pointer hover:bg-sky-950/30 transition select-none"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-[#0284C7] text-white flex items-center justify-center shrink-0 shadow-sm font-mono font-black text-xs">
+                  2A
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-[15px] sm:text-[16px] font-black uppercase tracking-[0.8px] text-[#38BDF8] flex items-center gap-2">
+                    2A · Standard Warehouse Tasks
                   </h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Standard 3PL operational procedures · Universal across ALL clients & multi-client consolidation batches.
+                  <p className="text-[11px] text-slate-400 truncate">
+                    Order Pick, Order Pack, Goods In, Put Away, B2B Pick, Rework, Barcoding, Returns, Stock Take &amp; QC
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <span className="px-2.5 py-1 rounded-full bg-sky-500/15 border border-sky-500/30 text-[11px] font-bold text-[#38BDF8]">
                   {standardTasks.length} {standardTasks.length === 1 ? 'task' : 'tasks'}
                 </span>
                 {isManagerOrAdmin && (
                   <button
                     type="button"
-                    onClick={() =>
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setTaskEditModal({
                         client_id: null,
                         is_standard: true,
@@ -2715,408 +3116,251 @@ export function NowClient({
                         barcode: '',
                         sort_order: standardTasks.length + 1,
                         active: true,
-                      })
-                    }
+                      });
+                    }}
                     title="Add standard warehouse task"
                     className="w-7 h-7 rounded-lg bg-sky-500/20 hover:bg-sky-500 text-sky-300 hover:text-slate-950 border border-sky-500/50 flex items-center justify-center transition shadow-sm"
                   >
                     <Plus className="w-4 h-4 stroke-[3]" />
                   </button>
                 )}
+                <span className="px-2.5 py-1 rounded-xl bg-slate-900/90 border border-sky-500/30 text-xs font-bold text-[#38BDF8] flex items-center gap-1">
+                  <span>{expandedTaskSections.standard ? 'Collapse' : 'Expand'}</span>
+                  <ChevronDown
+                    className={`w-4 h-4 transition-transform ${
+                      expandedTaskSections.standard ? 'rotate-180' : ''
+                    }`}
+                  />
+                </span>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              {standardTasks.map((task) => {
-                const isGoodsInMaster =
-                  task.code === 'STD-GOODSIN' ||
-                  task.name.toLowerCase().startsWith('goods-in');
-                const ginContTask =
-                  taskTypes.find((t) => t.code === 'STD-GIN-CONT') || task;
-                const ginPalTask =
-                  taskTypes.find((t) => t.code === 'STD-GIN-PAL') || task;
-                const ginBoxTask =
-                  taskTypes.find((t) => t.code === 'STD-GIN-BOX') || task;
+            {expandedTaskSections.standard && (
+              <div className="p-4 sm:p-5 border-t border-sky-500/25 grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-[#06101D]">
+                {standardTasks.map((task) => {
+                  const isGoodsInMaster =
+                    task.code === 'STD-GOODSIN' ||
+                    task.name.toLowerCase().startsWith('goods in') ||
+                    task.name.toLowerCase().startsWith('goods-in');
+                  const isRework = isReworkTask(task);
 
-                return (
-                  <div
-                    key={task.id}
-                    className={`p-4 rounded-2xl bg-[#0B1A2C] hover:bg-[#0E223A] border border-l-[4px] card-interactive flex flex-col justify-between gap-3 transition shadow ${
-                      task.code === 'STD-PICK'
-                        ? 'border-emerald-400/50 border-l-emerald-400 ring-1 ring-emerald-500/30'
-                        : 'border-sky-500/25 border-l-[#38BDF8]'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          executeStartTask(
-                            isGoodsInMaster ? ginPalTask : task,
-                            'picked',
-                            selectedClient
-                          )
-                        }
-                        className="flex-1 text-left min-w-0"
-                      >
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {task.code === 'STD-PICK' && (
-                            <span className="px-2 py-0.5 rounded bg-emerald-400 text-slate-950 font-mono text-[10px] font-black">
-                              DEFAULT #1 TASK
-                            </span>
-                          )}
-                          <span className="px-2 py-0.5 rounded bg-[#38BDF8] text-slate-950 font-mono text-[10px] font-black">
-                            STANDARD 3PL SOP
-                          </span>
-                          <span className="text-[12px] font-normal text-slate-400">
-                            {task.category || 'Fulfilment'}
-                          </span>
-                        </div>
-                        <div className="text-[15px] font-semibold text-[#E8E8E8] mt-1.5 leading-snug">
-                          {task.name}
-                        </div>
-                        <div className="text-[11px] font-normal text-slate-400 mt-1 flex flex-wrap items-center gap-1.5">
-                          <span className="text-slate-400">
-                            Target:{' '}
-                            <strong className="text-sky-300 font-medium">
-                              {isMultiClientSelected
-                                ? 'Multi-Client Wave'
-                                : selectedClient?.name}
-                            </strong>
-                          </span>
-                          {(isManagerOrAdmin || settings.show_targets_to_operatives) &&
-                          task.standard_minutes ? (
-                            <span className="px-2 py-0.5 rounded bg-sky-950/80 border border-sky-500/40 text-[10px] font-mono font-bold text-sky-300">
-                              ⚡ {Number(task.standard_minutes).toFixed(2)} min/
-                              {task.unit_label || 'unit'} std
-                            </span>
-                          ) : null}
-                          {task.unit_label && (
-                            <span className="px-2 py-0.5 rounded bg-teal-950/80 border border-teal-500/30 text-[11px] font-semibold text-[#2DD4BF]">
-                              {isGoodsInMaster
-                                ? 'Select Containers, Pallets, or Boxes below'
-                                : `Tracks ${task.unit_label}`}
-                            </span>
-                          )}
-                        </div>
-                      </button>
-
-                      <div className="flex items-center gap-1.5 shrink-0">
+                  return (
+                    <div
+                      key={task.id}
+                      className={`p-4 rounded-2xl bg-[#0B1A2C] hover:bg-[#0E223A] border border-l-[4px] card-interactive flex flex-col justify-between gap-3 transition shadow ${
+                        task.code === 'STD-PICK'
+                          ? 'border-emerald-400/50 border-l-emerald-400 ring-1 ring-emerald-500/30'
+                          : 'border-sky-500/25 border-l-[#38BDF8]'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
                         <button
                           type="button"
                           onClick={() =>
-                            toggleFavouriteTask(selectedClient?.id ?? null, task.id)
+                            executeStartTask(task, 'picked', selectedClient)
                           }
-                          className={`p-2.5 rounded-xl border transition ${
-                            favouriteKeys.includes(
-                              `${selectedClient?.id || 'STD'}:${task.id}`
-                            )
-                              ? 'bg-amber-500/20 border-amber-400 text-amber-300'
-                              : 'bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-300 border-slate-800'
-                          }`}
-                          title="Star as Weekly Favourite"
+                          className="flex-1 text-left min-w-0"
                         >
-                          <Star
-                            className={`w-4 h-4 ${
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {task.code === 'STD-PICK' && (
+                              <span className="px-2 py-0.5 rounded bg-emerald-400 text-slate-950 font-mono text-[10px] font-black">
+                                DEFAULT #1 TASK
+                              </span>
+                            )}
+                            <span className="px-2 py-0.5 rounded bg-[#38BDF8] text-slate-950 font-mono text-[10px] font-black">
+                              STANDARD TASK
+                            </span>
+                            {isRework && (
+                              <span className="px-2 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/40 font-mono text-[10px] font-bold">
+                                REQUIRES DESCRIPTION
+                              </span>
+                            )}
+                            <span className="text-[12px] font-normal text-slate-400">
+                              {task.category || 'Fulfilment'}
+                            </span>
+                          </div>
+                          <div className="text-[15px] font-semibold text-[#E8E8E8] mt-1.5 leading-snug">
+                            {task.name}
+                          </div>
+                          <div className="text-[11px] font-normal text-slate-400 mt-1 flex flex-wrap items-center gap-1.5">
+                            <span className="text-slate-400">
+                              Target:{' '}
+                              <strong className="text-sky-300 font-medium">
+                                {isMultiClientSelected
+                                  ? 'Multi-Client Wave'
+                                  : selectedClient?.name}
+                              </strong>
+                            </span>
+                            {(isManagerOrAdmin || settings.show_targets_to_operatives) &&
+                            task.target_enabled !== false &&
+                            task.standard_minutes ? (
+                              <span className="px-2 py-0.5 rounded bg-sky-950/80 border border-sky-500/40 text-[10px] font-mono font-bold text-sky-300">
+                                ⚡ {Number(task.standard_minutes).toFixed(2)} min/
+                                {task.unit_label || 'unit'} std
+                              </span>
+                            ) : null}
+                            {task.unit_label && (
+                              <span className="px-2 py-0.5 rounded bg-teal-950/80 border border-teal-500/30 text-[11px] font-semibold text-[#2DD4BF]">
+                                {isGoodsInMaster
+                                  ? 'Select Container / Pallet / Box on stop'
+                                  : isRework
+                                    ? 'Prompts for Rework Description'
+                                    : task.require_units_on_close === false
+                                      ? 'Helm Auto-Sync (No unit input)'
+                                      : `Tracks ${task.unit_label}`}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              toggleFavouriteTask(selectedClient?.id ?? null, task.id)
+                            }
+                            className={`p-2.5 rounded-xl border transition ${
                               favouriteKeys.includes(
                                 `${selectedClient?.id || 'STD'}:${task.id}`
                               )
-                                ? 'fill-current'
-                                : ''
+                                ? 'bg-amber-500/20 border-amber-400 text-amber-300'
+                                : 'bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-300 border-slate-800'
                             }`}
-                          />
-                        </button>
-                        {isManagerOrAdmin && (
-                          <button
-                            type="button"
-                            onClick={() => setTaskEditModal(task)}
-                            className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition"
-                            title="Edit standard task"
+                            title="Star as Weekly Favourite"
                           >
-                            <Pencil className="w-4 h-4" />
+                            <Star
+                              className={`w-4 h-4 ${
+                                favouriteKeys.includes(
+                                  `${selectedClient?.id || 'STD'}:${task.id}`
+                                )
+                                  ? 'fill-current'
+                                  : ''
+                              }`}
+                            />
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            openConfirmStart(
-                              isGoodsInMaster ? ginPalTask : task,
-                              'picked',
-                              selectedClient
-                            )
-                          }
-                          className="h-10 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[11px] font-bold flex items-center gap-1 transition"
-                          title="Start with an Order / Batch Reference"
-                        >
-                          <Hash className="w-3 h-3 text-[#38BDF8]" />
-                          Ref
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            executeStartTask(
-                              isGoodsInMaster ? ginPalTask : task,
-                              'picked',
-                              selectedClient
-                            )
-                          }
-                          className="play-btn w-11 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center shadow-md shadow-emerald-500/15 transition"
-                          title="Start standard warehouse task immediately"
-                        >
-                          <Play className="w-5 h-5 fill-current" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* GOODS-IN SUB-SELECTOR: CONTAINERS | PALLETS | BOXES */}
-                    {isGoodsInMaster && (
-                      <div className="pt-2.5 border-t border-sky-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-sky-300">
-                          Choose Goods-In Type:
-                        </span>
-                        <div className="grid grid-cols-3 gap-1.5 flex-1">
+                          {isManagerOrAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => setTaskEditModal(task)}
+                              className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition"
+                              title="Edit standard task"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() =>
-                              executeStartTask(ginContTask, 'picked', selectedClient)
+                              openConfirmStart(task, 'picked', selectedClient)
                             }
-                            className="px-2.5 py-2 rounded-xl bg-slate-950 hover:bg-sky-500 hover:text-slate-950 text-sky-200 border border-sky-500/40 text-xs font-black flex items-center justify-center gap-1 transition"
+                            className="h-10 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[11px] font-bold flex items-center gap-1 transition"
+                            title="Start with an Order / Batch Reference"
                           >
-                            📦 Containers
+                            <Hash className="w-3 h-3 text-[#38BDF8]" />
+                            Ref
                           </button>
                           <button
                             type="button"
                             onClick={() =>
-                              executeStartTask(ginPalTask, 'picked', selectedClient)
+                              executeStartTask(task, 'picked', selectedClient)
                             }
-                            className="px-2.5 py-2 rounded-xl bg-slate-950 hover:bg-sky-500 hover:text-slate-950 text-sky-200 border border-sky-500/40 text-xs font-black flex items-center justify-center gap-1 transition"
+                            className="play-btn w-11 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center shadow-md shadow-emerald-500/15 transition"
+                            title="Start standard warehouse task immediately"
                           >
-                            🪵 Pallets
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              executeStartTask(ginBoxTask, 'picked', selectedClient)
-                            }
-                            className="px-2.5 py-2 rounded-xl bg-slate-950 hover:bg-sky-500 hover:text-slate-950 text-sky-200 border border-sky-500/40 text-xs font-black flex items-center justify-center gap-1 transition"
-                          >
-                            📫 Boxes
+                            <Play className="w-5 h-5 fill-current" />
                           </button>
                         </div>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {/* Add Task + Tile for Standard Warehouse Tasks (Supervisors & Admins Only) */}
-              {isManagerOrAdmin && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTaskEditModal({
-                      client_id: null,
-                      is_standard: true,
-                      category:
-                        selectedCategoryFilter !== 'ALL'
-                          ? selectedCategoryFilter
-                          : 'Pick & Pack',
-                      name: '',
-                      code: 'STD-',
-                      standard_minutes: null,
-                      unit_label: 'orders',
-                      billable: true,
-                      rate: 25,
-                      barcode: '',
-                      sort_order: standardTasks.length + 1,
-                      active: true,
-                    });
-                  }}
-                  className="p-4 rounded-2xl bg-[#091522]/80 hover:bg-sky-950/30 border-2 border-dashed border-sky-500/40 hover:border-sky-400 card-interactive flex items-center justify-between gap-3 transition text-left min-h-[88px]"
-                >
-                  <div>
-                    <div className="inline-block px-2 py-0.5 rounded bg-sky-500/20 text-[#38BDF8] font-mono text-[10px] font-bold">
-                      STANDARD
                     </div>
-                    <div className="text-[15px] font-semibold text-[#E8E8E8] mt-1.5 leading-snug">
-                      Add Standard Task +
-                    </div>
-                    <div className="text-[11px] font-normal text-slate-400 mt-0.5">
-                      Add a warehouse-wide standard task
-                    </div>
-                  </div>
-                  <div className="w-11 h-11 rounded-xl bg-[#0284C7] text-white flex items-center justify-center shrink-0 shadow">
-                    <Plus className="w-5 h-5 stroke-[3]" />
-                  </div>
-                </button>
-              )}
-            </div>
-          </section>
+                  );
+                })}
 
-          {/* CONDUIT BAR 2: UNIVERSAL SOP TO BESPOKE SOW TRANSITION */}
-          <div className="relative py-2 flex items-center justify-center">
-            <div className="w-full border-t-2 border-dashed border-amber-500/35" />
-            <div className="absolute px-4 py-1.5 rounded-full bg-slate-900 border-2 border-amber-500/50 shadow-xl flex items-center gap-2 text-xs font-mono font-bold text-amber-300">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>OR EXECUTE BESPOKE CLIENT SPECIFICATIONS (CUSTOM SOW)</span>
-              <ChevronDown className="w-3.5 h-3.5 text-amber-400" />
-            </div>
-          </div>
-
-          {/* STATION 02B: BESPOKE CLIENT SOW TASKS ("TASKS SECTION") */}
-          <section className="bg-[#170F06] border-2 border-amber-500/45 border-l-[6px] border-l-[#F59E0B] rounded-3xl p-5 sm:p-6 space-y-4 shadow-2xl">
-            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-amber-500/25">
-              <div className="flex items-center gap-2.5">
-                <span className="px-2.5 py-1 rounded-xl bg-[#F59E0B] text-slate-950 flex items-center justify-center text-[12px] font-black tracking-wider shadow-sm">
-                  STEP 2B
-                </span>
-                <div>
-                  <h3 className="text-[17px] font-bold uppercase tracking-[1px] text-[#FBBF24] flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-[#FBBF24]" />
-                    Bespoke Client SOW Tasks {!isMultiClientSelected && selectedClient ? `— ${selectedClient.name}` : ''}
-                  </h3>
-                  <p className="text-[11px] text-amber-200/80 mt-0.5">
-                    Client-specific contracted work: custom packaging recipes, bespoke kitting, and contracted billing rates.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-[11px] font-bold text-[#FBBF24]">
-                  {customClientTasks.length} {customClientTasks.length === 1 ? 'task' : 'tasks'}
-                </span>
-                {isManagerOrAdmin && !isMultiClientSelected && (
+                {/* Add Task + Tile for Standard Warehouse Tasks (Supervisors & Admins Only) */}
+                {isManagerOrAdmin && (
                   <button
                     type="button"
-                    onClick={() =>
+                    onClick={() => {
                       setTaskEditModal({
-                        client_id: selectedClientId,
-                        is_standard: false,
+                        client_id: null,
+                        is_standard: true,
                         category:
                           selectedCategoryFilter !== 'ALL'
                             ? selectedCategoryFilter
                             : 'Pick & Pack',
                         name: '',
-                        code: `${selectedClient?.code || 'TSK'}-`,
+                        code: 'STD-',
                         standard_minutes: null,
                         unit_label: 'orders',
                         billable: true,
                         rate: 25,
                         barcode: '',
-                        sort_order: customClientTasks.length + 1,
+                        sort_order: standardTasks.length + 1,
                         active: true,
-                      })
-                    }
-                    title={`Add custom task for ${selectedClient?.name}`}
-                    className="w-7 h-7 rounded-lg bg-[#FB923C]/20 hover:bg-[#FB923C] text-[#FB923C] hover:text-slate-950 border border-[#FB923C]/50 flex items-center justify-center transition shadow-sm"
+                      });
+                    }}
+                    className="p-4 rounded-2xl bg-[#091522]/80 hover:bg-sky-950/30 border-2 border-dashed border-sky-500/40 hover:border-sky-400 card-interactive flex items-center justify-between gap-3 transition text-left min-h-[88px]"
                   >
-                    <Plus className="w-4 h-4 stroke-[3]" />
+                    <div>
+                      <div className="inline-block px-2 py-0.5 rounded bg-sky-500/20 text-[#38BDF8] font-mono text-[10px] font-bold">
+                        STANDARD
+                      </div>
+                      <div className="text-[15px] font-semibold text-[#E8E8E8] mt-1.5 leading-snug">
+                        Add Standard Task +
+                      </div>
+                      <div className="text-[11px] font-normal text-slate-400 mt-0.5">
+                        Add a warehouse-wide standard task
+                      </div>
+                    </div>
+                    <div className="w-11 h-11 rounded-xl bg-[#0284C7] text-white flex items-center justify-center shrink-0 shadow">
+                      <Plus className="w-5 h-5 stroke-[3]" />
+                    </div>
                   </button>
                 )}
               </div>
-            </div>
+            )}
+          </section>
 
-            {/* Multi-Client Selection State Banner for Custom Tasks */}
-            {isMultiClientSelected ? (
-              <div className="p-5 sm:p-6 rounded-2xl bg-amber-950/30 border-2 border-dashed border-amber-500/40 flex flex-col sm:flex-row items-center justify-between gap-4 text-left">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center shrink-0">
-                    <Boxes className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h4 className="text-[15px] font-bold text-amber-200">
-                      Multi-Client / Consolidated Batch Active
-                    </h4>
-                    <p className="text-xs text-amber-200/80 max-w-xl mt-1 leading-relaxed">
-                      Universal standard warehouse operations in <strong className="text-white">Step 2A</strong> above are active and ready for any consolidated wave. Bespoke SOW tasks are tailored to individual clients. To run specialized kitting, custom relabelling, or client-specific assembly, pick a client in <strong className="text-white">Step 1</strong>.
-                    </p>
-                  </div>
+          {/* 2. COLLAPSIBLE BAR: 2B · BESPOKE CLIENT TASKS */}
+          <section className="bg-[#170F06] border-2 border-amber-500/45 border-l-[6px] border-l-[#F59E0B] rounded-2xl overflow-hidden shadow-xl transition">
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => toggleTaskSection('bespoke')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  toggleTaskSection('bespoke');
+                }
+              }}
+              className="w-full px-4 sm:px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 cursor-pointer hover:bg-amber-950/30 transition select-none"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-[#F59E0B] text-slate-950 flex items-center justify-center shrink-0 shadow-sm font-mono font-black text-xs">
+                  2B
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const firstAlphabetical = alphabeticalClients[0];
-                    if (firstAlphabetical) setSelectedClientId(firstAlphabetical.id);
-                  }}
-                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black shrink-0 transition shadow"
-                >
-                  Select a Client
-                </button>
+                <div className="min-w-0">
+                  <h3 className="text-[15px] sm:text-[16px] font-black uppercase tracking-[0.8px] text-[#FBBF24] flex items-center gap-2">
+                    2B · Bespoke Client Tasks{' '}
+                    {!isMultiClientSelected && selectedClient
+                      ? `— ${selectedClient.name}`
+                      : ''}
+                  </h3>
+                  <p className="text-[11px] text-amber-200/80 truncate">
+                    Client-specific contracted packaging, kitting &amp; custom SOW tasks
+                  </p>
+                </div>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                {customClientTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className="p-4 rounded-2xl bg-[#231508] hover:bg-[#2C1A0A] border border-amber-500/35 border-l-[4px] border-l-[#F59E0B] card-interactive flex items-center justify-between gap-3 transition shadow"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => executeStartTask(task, 'picked', selectedClient)}
-                      className="flex-1 text-left min-w-0"
-                    >
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="px-2 py-0.5 rounded bg-[#F59E0B] text-slate-950 font-mono text-[10px] font-black">
-                          {selectedClient?.code} BESPOKE SOW
-                        </span>
-                        <span className="text-[12px] font-normal text-amber-200/80">
-                          {task.category || 'Fulfilment'}
-                        </span>
-                      </div>
-                      <div className="text-[15px] font-semibold text-[#E8E8E8] mt-1.5 leading-snug">
-                        {task.name}
-                      </div>
-                      <div className="text-[11px] font-normal text-slate-400 mt-1 flex flex-wrap items-center gap-1.5">
-                        {task.rate ? (
-                          <span className="px-2 py-0.5 rounded bg-amber-950/80 border border-amber-500/30 text-[10px] font-mono font-bold text-amber-300">
-                            £{Number(task.rate).toFixed(2)}/hr rate
-                          </span>
-                        ) : null}
-                        {task.unit_label && (
-                          <div className="inline-block px-2 py-0.5 rounded bg-teal-950/80 border border-teal-500/30 text-[11px] font-semibold text-[#2DD4BF]">
-                            Tracks {task.unit_label}
-                          </div>
-                        )}
-                      </div>
-                    </button>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {isManagerOrAdmin && (
-                        <button
-                          type="button"
-                          onClick={() => setTaskEditModal(task)}
-                          className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition"
-                          title="Edit task"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => openConfirmStart(task, 'picked', selectedClient)}
-                        className="h-10 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[11px] font-bold flex items-center gap-1 transition"
-                        title="Start with an Order / Batch Reference"
-                      >
-                        <Hash className="w-3 h-3 text-[#FB923C]" />
-                        Ref
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => executeStartTask(task, 'picked', selectedClient)}
-                        className="play-btn w-11 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center shadow-md shadow-emerald-500/15 transition"
-                        title="Start custom task immediately"
-                      >
-                        <Play className="w-5 h-5 fill-current" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-
-                {/* Add Task + Tile for Custom Tasks (Supervisors & Admins Only) */}
-                {isManagerOrAdmin && (
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-[11px] font-bold text-[#FBBF24]">
+                  {customClientTasks.length}{' '}
+                  {customClientTasks.length === 1 ? 'task' : 'tasks'}
+                </span>
+                {isManagerOrAdmin && !isMultiClientSelected && (
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setTaskEditModal({
                         client_id: selectedClientId,
                         is_standard: false,
@@ -3135,257 +3379,451 @@ export function NowClient({
                         active: true,
                       });
                     }}
-                    className="p-4 rounded-2xl bg-[#1C1207]/80 hover:bg-amber-950/30 border-2 border-dashed border-amber-500/40 hover:border-amber-400 card-interactive flex items-center justify-between gap-3 transition text-left min-h-[88px]"
+                    title={`Add custom task for ${selectedClient?.name}`}
+                    className="w-7 h-7 rounded-lg bg-[#FB923C]/20 hover:bg-[#FB923C] text-[#FB923C] hover:text-slate-950 border border-[#FB923C]/50 flex items-center justify-center transition shadow-sm"
                   >
-                    <div>
-                      <div className="inline-block px-2 py-0.5 rounded bg-[#FB923C]/20 text-[#FB923C] font-mono text-[10px] font-bold">
-                        {selectedClient?.code} CUSTOM
-                      </div>
-                      <div className="text-[15px] font-semibold text-[#E8E8E8] mt-1.5 leading-snug">
-                        Add Custom Task +
-                      </div>
-                      <div className="text-[11px] font-normal text-slate-400 mt-0.5">
-                        Add a bespoke task for {selectedClient?.name}
-                      </div>
-                    </div>
-                    <div className="w-11 h-11 rounded-xl bg-[#F59E0B] text-slate-950 flex items-center justify-center shrink-0 shadow">
-                      <Plus className="w-5 h-5 stroke-[3]" />
-                    </div>
+                    <Plus className="w-4 h-4 stroke-[3]" />
                   </button>
+                )}
+                <span className="px-2.5 py-1 rounded-xl bg-slate-900/90 border border-amber-500/30 text-xs font-bold text-[#FBBF24] flex items-center gap-1">
+                  <span>{expandedTaskSections.bespoke ? 'Collapse' : 'Expand'}</span>
+                  <ChevronDown
+                    className={`w-4 h-4 transition-transform ${
+                      expandedTaskSections.bespoke ? 'rotate-180' : ''
+                    }`}
+                  />
+                </span>
+              </div>
+            </div>
+
+            {expandedTaskSections.bespoke && (
+              <div className="p-4 sm:p-5 border-t border-amber-500/25 bg-[#120B04]">
+                {isMultiClientSelected ? (
+                  <div className="p-5 sm:p-6 rounded-2xl bg-amber-950/30 border-2 border-dashed border-amber-500/40 flex flex-col sm:flex-row items-center justify-between gap-4 text-left">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center shrink-0">
+                        <Boxes className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h4 className="text-[15px] font-bold text-amber-200">
+                          Multi-Client / Consolidated Batch Active
+                        </h4>
+                        <p className="text-xs text-amber-200/80 max-w-xl mt-1 leading-relaxed">
+                          Standard Warehouse Tasks above are ready for any consolidated wave. Bespoke Client Tasks are tailored to individual clients — select a specific client in <strong className="text-white">Step 1</strong> to view its custom tasks.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const firstAlphabetical = alphabeticalClients[0];
+                        if (firstAlphabetical) setSelectedClientId(firstAlphabetical.id);
+                      }}
+                      className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black shrink-0 transition shadow"
+                    >
+                      Select a Client
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    {customClientTasks.map((task) => (
+                      <div
+                        key={task.id}
+                        className="p-4 rounded-2xl bg-[#231508] hover:bg-[#2C1A0A] border border-amber-500/35 border-l-[4px] border-l-[#F59E0B] card-interactive flex items-center justify-between gap-3 transition shadow"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => executeStartTask(task, 'picked', selectedClient)}
+                          className="flex-1 text-left min-w-0"
+                        >
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="px-2 py-0.5 rounded bg-[#F59E0B] text-slate-950 font-mono text-[10px] font-black">
+                              {selectedClient?.code} BESPOKE
+                            </span>
+                            <span className="text-[12px] font-normal text-amber-200/80">
+                              {task.category || 'Fulfilment'}
+                            </span>
+                          </div>
+                          <div className="text-[15px] font-semibold text-[#E8E8E8] mt-1.5 leading-snug">
+                            {task.name}
+                          </div>
+                          <div className="text-[11px] font-normal text-slate-400 mt-1 flex flex-wrap items-center gap-1.5">
+                            {task.rate ? (
+                              <span className="px-2 py-0.5 rounded bg-amber-950/80 border border-amber-500/30 text-[10px] font-mono font-bold text-amber-300">
+                                £{Number(task.rate).toFixed(2)}/hr rate
+                              </span>
+                            ) : null}
+                            {task.unit_label && (
+                              <div className="inline-block px-2 py-0.5 rounded bg-teal-950/80 border border-teal-500/30 text-[11px] font-semibold text-[#2DD4BF]">
+                                Tracks {task.unit_label}
+                              </div>
+                            )}
+                          </div>
+                        </button>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {isManagerOrAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => setTaskEditModal(task)}
+                              className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition"
+                              title="Edit task"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => openConfirmStart(task, 'picked', selectedClient)}
+                            className="h-10 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[11px] font-bold flex items-center gap-1 transition"
+                            title="Start with an Order / Batch Reference"
+                          >
+                            <Hash className="w-3 h-3 text-[#FB923C]" />
+                            Ref
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => executeStartTask(task, 'picked', selectedClient)}
+                            className="play-btn w-11 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center shadow-md shadow-emerald-500/15 transition"
+                            title="Start custom task immediately"
+                          >
+                            <Play className="w-5 h-5 fill-current" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {isManagerOrAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTaskEditModal({
+                            client_id: selectedClientId,
+                            is_standard: false,
+                            category:
+                              selectedCategoryFilter !== 'ALL'
+                                ? selectedCategoryFilter
+                                : 'Pick & Pack',
+                            name: '',
+                            code: `${selectedClient?.code || 'TSK'}-`,
+                            standard_minutes: null,
+                            unit_label: 'orders',
+                            billable: true,
+                            rate: 25,
+                            barcode: '',
+                            sort_order: customClientTasks.length + 1,
+                            active: true,
+                          });
+                        }}
+                        className="p-4 rounded-2xl bg-[#1C1207]/80 hover:bg-amber-950/30 border-2 border-dashed border-amber-500/40 hover:border-amber-400 card-interactive flex items-center justify-between gap-3 transition text-left min-h-[88px]"
+                      >
+                        <div>
+                          <div className="inline-block px-2 py-0.5 rounded bg-[#FB923C]/20 text-[#FB923C] font-mono text-[10px] font-bold">
+                            {selectedClient?.code} CUSTOM
+                          </div>
+                          <div className="text-[15px] font-semibold text-[#E8E8E8] mt-1.5 leading-snug">
+                            Add Custom Task +
+                          </div>
+                          <div className="text-[11px] font-normal text-slate-400 mt-0.5">
+                            Add a bespoke task for {selectedClient?.name}
+                          </div>
+                        </div>
+                        <div className="w-11 h-11 rounded-xl bg-[#F59E0B] text-slate-950 flex items-center justify-center shrink-0 shadow">
+                          <Plus className="w-5 h-5 stroke-[3]" />
+                        </div>
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             )}
           </section>
 
-          {/* ITEM #9 — STEP 2C: BESPOKE PROJECTS (COLLAPSIBLE COLOUR-CODED PROJECT FOLDERS) */}
-          <section className="bg-[#120A1E] border-2 border-violet-500/45 border-l-[6px] border-l-violet-400 rounded-3xl p-5 sm:p-6 space-y-4 shadow-2xl">
-            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-violet-500/25">
-              <div className="flex items-center gap-2.5">
-                <span className="px-2.5 py-1 rounded-xl bg-violet-400 text-slate-950 flex items-center justify-center text-[12px] font-black tracking-wider shadow-sm">
-                  STEP 2C
-                </span>
-                <div>
-                  <h3 className="text-[17px] font-bold uppercase tracking-[1px] text-violet-300 flex items-center gap-2">
-                    <FolderOpen className="w-5 h-5 text-violet-300" />
-                    Bespoke Projects (Collapsible Multi-Part Folders)
+          {/* 3. COLLAPSIBLE BAR: 2C · BESPOKE PROJECTS */}
+          <section className="bg-[#120A1E] border-2 border-violet-500/45 border-l-[6px] border-l-violet-400 rounded-2xl overflow-hidden shadow-xl transition">
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => toggleTaskSection('projects')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  toggleTaskSection('projects');
+                }
+              }}
+              className="w-full px-4 sm:px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 cursor-pointer hover:bg-violet-950/30 transition select-none"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-violet-400 text-slate-950 flex items-center justify-center shrink-0 shadow-sm font-mono font-black text-xs">
+                  2C
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-[15px] sm:text-[16px] font-black uppercase tracking-[0.8px] text-violet-300 flex items-center gap-2">
+                    2C · Bespoke Projects
                   </h3>
-                  <p className="text-[11px] text-violet-200/80 mt-0.5">
-                    Colour-coded project folders containing multi-stage sub-tasks (e.g. FSDU Building, Stocking, Cardboard Breakdown).
+                  <p className="text-[11px] text-violet-200/80 truncate">
+                    Multi-stage project folders (e.g. FSDU Building, Stocking, Cardboard Breakdown)
                   </p>
                 </div>
               </div>
 
-              {isManagerOrAdmin && !isMultiClientSelected && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setTaskEditModal({
-                      client_id: selectedClientId,
-                      is_standard: false,
-                      category: 'Kitting & Value Add',
-                      project_name: 'FSDU Retail Display Build Project',
-                      project_color: 'amber',
-                      name: '',
-                      code: `${selectedClient?.code || 'PRJ'}-`,
-                      standard_minutes: null,
-                      unit_label: 'FSDUs',
-                      billable: true,
-                      rate: 28,
-                      barcode: '',
-                      sort_order: customClientTasks.length + 1,
-                      active: true,
-                    })
-                  }
-                  className="px-3 py-1.5 rounded-xl bg-violet-500/20 hover:bg-violet-400 text-violet-200 hover:text-slate-950 border border-violet-400/50 text-xs font-black flex items-center gap-1.5 transition"
-                >
-                  <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                  Add Project Task
-                </button>
-              )}
-            </div>
-
-            {bespokeProjectsList.length === 0 ? (
-              <div className="p-4 rounded-2xl bg-slate-950/60 border border-violet-500/25 text-xs text-slate-400 flex items-center justify-between gap-3">
-                <span>
-                  No multi-part Bespoke Projects configured for{' '}
-                  <strong className="text-white">{selectedClient?.name}</strong> yet.
-                  (Try selecting <strong>CCELL Direct</strong> or <strong>Payload Drinks</strong> to view the sample FSDU Build Project folder.)
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="px-2.5 py-1 rounded-full bg-violet-500/15 border border-violet-500/30 text-[11px] font-bold text-violet-300">
+                  {bespokeProjectsList.length}{' '}
+                  {bespokeProjectsList.length === 1 ? 'project' : 'projects'}
+                </span>
+                {isManagerOrAdmin && !isMultiClientSelected && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setTaskEditModal({
+                        client_id: selectedClientId,
+                        is_standard: false,
+                        category: 'Kitting & Value Add',
+                        project_name: 'FSDU Retail Display Build Project',
+                        project_color: 'amber',
+                        name: '',
+                        code: `${selectedClient?.code || 'PRJ'}-`,
+                        standard_minutes: null,
+                        unit_label: 'FSDUs',
+                        billable: true,
+                        rate: 28,
+                        barcode: '',
+                        sort_order: customClientTasks.length + 1,
+                        active: true,
+                      });
+                    }}
+                    title="Add project task"
+                    className="w-7 h-7 rounded-lg bg-violet-500/20 hover:bg-violet-400 text-violet-200 hover:text-slate-950 border border-violet-400/50 flex items-center justify-center transition shadow-sm"
+                  >
+                    <Plus className="w-4 h-4 stroke-[3]" />
+                  </button>
+                )}
+                <span className="px-2.5 py-1 rounded-xl bg-slate-900/90 border border-violet-500/30 text-xs font-bold text-violet-300 flex items-center gap-1">
+                  <span>{expandedTaskSections.projects ? 'Collapse' : 'Expand'}</span>
+                  <ChevronDown
+                    className={`w-4 h-4 transition-transform ${
+                      expandedTaskSections.projects ? 'rotate-180' : ''
+                    }`}
+                  />
                 </span>
               </div>
-            ) : (
-              <div className="space-y-3">
-                {bespokeProjectsList.map((proj) => {
-                  const folderKey = `${proj.clientId || 'STD'}::${proj.projectName}`;
-                  const isOpen = openProjectFolders[folderKey] ?? true;
+            </div>
+
+            {expandedTaskSections.projects && (
+              <div className="p-4 sm:p-5 border-t border-violet-500/25 bg-[#0D0716]">
+                {bespokeProjectsList.length === 0 ? (
+                  <div className="p-4 rounded-2xl bg-slate-950/60 border border-violet-500/25 text-xs text-slate-400 flex items-center justify-between gap-3">
+                    <span>
+                      No multi-part Bespoke Projects configured for{' '}
+                      <strong className="text-white">{selectedClient?.name}</strong> yet.
+                      (Try selecting <strong>CCELL Direct</strong> or{' '}
+                      <strong>Payload Drinks</strong> to view the sample FSDU Build Project folder.)
+                    </span>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {bespokeProjectsList.map((proj) => {
+                      const folderKey = `${proj.clientId || 'STD'}::${proj.projectName}`;
+                      const isOpen = openProjectFolders[folderKey] ?? true;
+                      return (
+                        <div
+                          key={folderKey}
+                          className="rounded-2xl bg-slate-950/90 border-2 border-violet-500/40 overflow-hidden shadow-lg"
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOpenProjectFolders((prev) => ({
+                                ...prev,
+                                [folderKey]: !isOpen,
+                              }))
+                            }
+                            className="w-full px-4 py-3.5 bg-gradient-to-r from-violet-950/70 via-slate-900 to-slate-900 flex items-center justify-between gap-3 text-left hover:bg-violet-950/90 transition"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-9 h-9 rounded-xl bg-violet-500/25 border border-violet-400/50 text-violet-200 flex items-center justify-center shrink-0">
+                                <FolderOpen className="w-5 h-5" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="px-2 py-0.5 rounded bg-violet-400 text-slate-950 font-mono text-[10px] font-black uppercase">
+                                    PROJECT FOLDER
+                                  </span>
+                                  <span className="text-xs font-bold text-violet-300">
+                                    {proj.clientName}
+                                  </span>
+                                  <span className="text-[11px] font-mono text-slate-400">
+                                    ({proj.tasks.length} sub-tasks)
+                                  </span>
+                                </div>
+                                <div className="text-base font-black text-white truncate mt-0.5">
+                                  {proj.projectName}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-xs font-bold text-violet-300">
+                                {isOpen ? 'Collapse' : 'Expand Sub-Tasks'}
+                              </span>
+                              <ChevronDown
+                                className={`w-5 h-5 text-violet-300 transition-transform ${
+                                  isOpen ? 'rotate-180' : ''
+                                }`}
+                              />
+                            </div>
+                          </button>
+
+                          {isOpen && (
+                            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950/60 border-t border-violet-500/25">
+                              {proj.tasks.map((task, idx) => {
+                                const targetClient =
+                                  effectiveClients.find((c) => c.id === task.client_id) ||
+                                  selectedClient;
+                                return (
+                                  <div
+                                    key={task.id}
+                                    className="p-3.5 rounded-xl bg-slate-900 hover:bg-slate-800/90 border border-violet-500/30 border-l-[4px] border-l-violet-400 flex items-center justify-between gap-3 transition"
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        executeStartTask(task, 'picked', targetClient)
+                                      }
+                                      className="flex-1 text-left min-w-0"
+                                    >
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="px-1.5 py-0.5 rounded bg-violet-500/25 text-violet-200 font-mono text-[10px] font-black">
+                                          STAGE {idx + 1}
+                                        </span>
+                                        <span className="text-[11px] font-mono text-slate-400">
+                                          {task.code}
+                                        </span>
+                                      </div>
+                                      <div className="text-sm font-bold text-white mt-1 leading-snug">
+                                        {task.name}
+                                      </div>
+                                      {task.unit_label && (
+                                        <div className="text-[11px] text-teal-300 font-semibold mt-1">
+                                          Tracks {task.unit_label}
+                                        </div>
+                                      )}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        executeStartTask(task, 'picked', targetClient)
+                                      }
+                                      className="play-btn w-10 h-10 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center shrink-0 shadow"
+                                      title="Start project sub-task"
+                                    >
+                                      <Play className="w-4 h-4 fill-current" />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* 4. COLLAPSIBLE BAR: 2D · CLOUD9 HOUSEKEEPING TASKS */}
+          <section className="bg-[#0E131A] border-2 border-slate-700/80 border-l-[6px] border-l-rose-400 rounded-2xl overflow-hidden shadow-xl transition">
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => toggleTaskSection('housekeeping')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  toggleTaskSection('housekeeping');
+                }
+              }}
+              className="w-full px-4 sm:px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 cursor-pointer hover:bg-rose-950/20 transition select-none"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 flex items-center justify-center shrink-0 shadow-sm font-mono font-black text-xs">
+                  2D
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-[15px] sm:text-[16px] font-black uppercase tracking-[0.8px] text-slate-100 flex items-center gap-2">
+                    2D · Cloud9 Housekeeping Tasks
+                  </h3>
+                  <p className="text-[11px] text-slate-400 truncate">
+                    Replenishment, Sweeping &amp; Aisle Cleaning, Cardboard Cleanout, Bench Restock, Pallets, Forklift &amp; Briefings
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="px-2.5 py-1 rounded-full bg-rose-500/15 border border-rose-500/30 text-[11px] font-bold text-rose-300">
+                  {housekeepingTasks.length}{' '}
+                  {housekeepingTasks.length === 1 ? 'task' : 'tasks'}
+                </span>
+                <span className="px-2.5 py-1 rounded-xl bg-slate-900/90 border border-rose-500/30 text-xs font-bold text-rose-300 flex items-center gap-1">
+                  <span>
+                    {expandedTaskSections.housekeeping ? 'Collapse' : 'Expand'}
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 transition-transform ${
+                      expandedTaskSections.housekeeping ? 'rotate-180' : ''
+                    }`}
+                  />
+                </span>
+              </div>
+            </div>
+
+            {expandedTaskSections.housekeeping && (
+              <div className="p-4 sm:p-5 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-[#0A0E14]">
+                {housekeepingTasks.map((task) => {
+                  const targetClient =
+                    effectiveClients.find((c) => c.id === task.client_id) ||
+                    MULTI_CLIENT_DEFAULT;
                   return (
                     <div
-                      key={folderKey}
-                      className="rounded-2xl bg-slate-950/90 border-2 border-violet-500/40 overflow-hidden shadow-lg"
+                      key={`hk-${task.id}`}
+                      className="p-4 rounded-2xl bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 border-l-[4px] border-l-rose-400 flex items-center justify-between gap-3 transition shadow"
                     >
                       <button
                         type="button"
-                        onClick={() =>
-                          setOpenProjectFolders((prev) => ({
-                            ...prev,
-                            [folderKey]: !isOpen,
-                          }))
-                        }
-                        className="w-full px-4 py-3.5 bg-gradient-to-r from-violet-950/70 via-slate-900 to-slate-900 flex items-center justify-between gap-3 text-left hover:bg-violet-950/90 transition"
+                        onClick={() => executeStartTask(task, 'picked', targetClient)}
+                        className="flex-1 text-left min-w-0"
                       >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-9 h-9 rounded-xl bg-violet-500/25 border border-violet-400/50 text-violet-200 flex items-center justify-center shrink-0">
-                            <FolderOpen className="w-5 h-5" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="px-2 py-0.5 rounded bg-violet-400 text-slate-950 font-mono text-[10px] font-black uppercase">
-                                PROJECT FOLDER
-                              </span>
-                              <span className="text-xs font-bold text-violet-300">
-                                {proj.clientName}
-                              </span>
-                              <span className="text-[11px] font-mono text-slate-400">
-                                ({proj.tasks.length} sub-tasks)
-                              </span>
-                            </div>
-                            <div className="text-base font-black text-white truncate mt-0.5">
-                              {proj.projectName}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-xs font-bold text-violet-300">
-                            {isOpen ? 'Collapse' : 'Expand Sub-Tasks'}
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono text-[10px] font-black">
+                            CLOUD9 HOUSEKEEPING
                           </span>
-                          <ChevronDown
-                            className={`w-5 h-5 text-violet-300 transition-transform ${
-                              isOpen ? 'rotate-180' : ''
-                            }`}
-                          />
+                          <span className="text-xs text-slate-400">
+                            {task.category || 'Housekeeping'}
+                          </span>
+                        </div>
+                        <div className="text-[15px] font-semibold text-white mt-1.5 leading-snug">
+                          {task.name}
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">
+                          Non-billable internal warehouse activity
                         </div>
                       </button>
-
-                      {isOpen && (
-                        <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950/60 border-t border-violet-500/25">
-                          {proj.tasks.map((task, idx) => {
-                            const targetClient =
-                              effectiveClients.find((c) => c.id === task.client_id) ||
-                              selectedClient;
-                            return (
-                              <div
-                                key={task.id}
-                                className="p-3.5 rounded-xl bg-slate-900 hover:bg-slate-800/90 border border-violet-500/30 border-l-[4px] border-l-violet-400 flex items-center justify-between gap-3 transition"
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    executeStartTask(task, 'picked', targetClient)
-                                  }
-                                  className="flex-1 text-left min-w-0"
-                                >
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="px-1.5 py-0.5 rounded bg-violet-500/25 text-violet-200 font-mono text-[10px] font-black">
-                                      STAGE {idx + 1}
-                                    </span>
-                                    <span className="text-[11px] font-mono text-slate-400">
-                                      {task.code}
-                                    </span>
-                                  </div>
-                                  <div className="text-sm font-bold text-white mt-1 leading-snug">
-                                    {task.name}
-                                  </div>
-                                  {task.unit_label && (
-                                    <div className="text-[11px] text-teal-300 font-semibold mt-1">
-                                      Tracks {task.unit_label}
-                                    </div>
-                                  )}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    executeStartTask(task, 'picked', targetClient)
-                                  }
-                                  className="play-btn w-10 h-10 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center shrink-0 shadow"
-                                  title="Start project sub-task"
-                                >
-                                  <Play className="w-4 h-4 fill-current" />
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => executeStartTask(task, 'picked', targetClient)}
+                        className="play-btn w-11 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center shrink-0 shadow"
+                      >
+                        <Play className="w-5 h-5 fill-current" />
+                      </button>
                     </div>
                   );
                 })}
               </div>
             )}
-          </section>
-
-          {/* ITEM #10 — STEP 2D: CLOUD9 INTERNAL / HOUSEKEEPING (NON-CLIENT OVERHEADS) */}
-          <section className="bg-[#0E131A] border-2 border-slate-700/80 border-l-[6px] border-l-rose-400 rounded-3xl p-5 sm:p-6 space-y-4 shadow-xl">
-            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2.5">
-                <span className="px-2.5 py-1 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 flex items-center justify-center text-[12px] font-black tracking-wider">
-                  STEP 2D
-                </span>
-                <div>
-                  <h3 className="text-[17px] font-bold uppercase tracking-[1px] text-slate-200 flex items-center gap-2">
-                    <Building2 className="w-5 h-5 text-rose-400" />
-                    Cloud9 Internal / Housekeeping (Non-Client Overheads)
-                  </h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Sweeping, warehouse cleaning, and internal jobs — recorded as Cloud9 internal overhead and never billed to a client.
-                  </p>
-                </div>
-              </div>
-              <span className="px-2.5 py-1 rounded-full bg-rose-500/15 border border-rose-500/30 text-[11px] font-bold text-rose-300">
-                Internal Overhead · Non-Billable
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              {housekeepingTasks.map((task) => {
-                const targetClient =
-                  effectiveClients.find((c) => c.id === task.client_id) ||
-                  MULTI_CLIENT_DEFAULT;
-                return (
-                  <div
-                    key={`hk-${task.id}`}
-                    className="p-4 rounded-2xl bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 border-l-[4px] border-l-rose-400 flex items-center justify-between gap-3 transition shadow"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => executeStartTask(task, 'picked', targetClient)}
-                      className="flex-1 text-left min-w-0"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono text-[10px] font-black">
-                          CLOUD9 INTERNAL
-                        </span>
-                        <span className="text-xs text-slate-400">
-                          {task.category || 'Housekeeping'}
-                        </span>
-                      </div>
-                      <div className="text-[15px] font-semibold text-white mt-1.5 leading-snug">
-                        {task.name}
-                      </div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">
-                        Non-billable internal warehouse activity
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => executeStartTask(task, 'picked', targetClient)}
-                      className="play-btn w-11 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center shrink-0 shadow"
-                    >
-                      <Play className="w-5 h-5 fill-current" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
           </section>
         </div>
       )}
@@ -3468,6 +3906,11 @@ export function NowClient({
                         </span>
                       )}
                     </div>
+                    {entry.note && (
+                      <div className="mt-1 text-[11px] font-semibold text-amber-300/90 bg-slate-950/70 border border-slate-800 rounded-lg px-2.5 py-1 inline-block">
+                        💬 {entry.note}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-3 self-end sm:self-center">
@@ -3564,7 +4007,7 @@ export function NowClient({
         </div>
       )}
 
-      {/* CONFIRM-AND-START MODAL (Used for Barcode Scan or attaching Order/Batch Ref) */}
+      {/* CONFIRM-AND-START MODAL (Used for Barcode Scan, attaching Order/Batch Ref, or mandatory Rework description) */}
       {confirmStartModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <form
@@ -3574,7 +4017,10 @@ export function NowClient({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-black uppercase tracking-wider">
-                  {confirmStartModal.targetClient.code} · Ready to Start
+                  {confirmStartModal.targetClient.code} ·{' '}
+                  {isReworkTask(confirmStartModal.task)
+                    ? 'Rework Description Required'
+                    : 'Ready to Start'}
                 </div>
                 <h3 className="text-2xl font-black text-white mt-2 leading-snug">
                   {confirmStartModal.task.name}
@@ -3600,15 +4046,29 @@ export function NowClient({
             )}
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                Order / Wave / Batch Reference (Optional)
-              </label>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
+                  {isReworkTask(confirmStartModal.task)
+                    ? 'Describe What Rework Is Being Done *'
+                    : 'Order / Wave / Batch Reference (Optional)'}
+                </label>
+                <VoiceMicButton
+                  onTranscript={(spoken) =>
+                    setOrderRefInput((prev) => appendTranscript(prev, spoken))
+                  }
+                />
+              </div>
               <input
                 type="text"
                 autoFocus
+                required={isReworkTask(confirmStartModal.task)}
                 value={orderRefInput}
                 onChange={(e) => setOrderRefInput(e.target.value)}
-                placeholder="e.g. WAVE-410 or ASN-901"
+                placeholder={
+                  isReworkTask(confirmStartModal.task)
+                    ? 'e.g. Repacking damaged cartons / Replacing outer sleeves'
+                    : 'e.g. WAVE-410 or ASN-901'
+                }
                 className="w-full h-14 px-4 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-emerald-500"
               />
             </div>
@@ -3623,8 +4083,11 @@ export function NowClient({
               </button>
               <button
                 type="submit"
-                disabled={busy}
-                className="btn-glove-lg rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-lg font-black flex items-center justify-center gap-2 shadow-lg"
+                disabled={
+                  busy ||
+                  (isReworkTask(confirmStartModal.task) && !orderRefInput.trim())
+                }
+                className="btn-glove-lg rounded-2xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 text-lg font-black flex items-center justify-center gap-2 shadow-lg"
               >
                 <Play className="w-5 h-5 fill-current" />
                 Start Now
@@ -3660,9 +4123,16 @@ export function NowClient({
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
-                Task Title / Description *
-              </label>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Task Title / Description *
+                </label>
+                <VoiceMicButton
+                  onTranscript={(spoken) =>
+                    setUnlistedTitle((prev) => appendTranscript(prev, spoken))
+                  }
+                />
+              </div>
               <input
                 type="text"
                 required
@@ -3786,9 +4256,18 @@ export function NowClient({
               </div>
               {unlistedBillingStatus === 'our_cost' && (
                 <div className="mt-2.5 p-3 rounded-xl bg-rose-950/40 border border-rose-500/50 space-y-1">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-rose-300">
-                    Why is this unbilled? (Mandatory Justification for K & Finance)*
-                  </label>
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-rose-300">
+                      Why is this unbilled? (Mandatory Justification for K & Finance)*
+                    </label>
+                    <VoiceMicButton
+                      onTranscript={(spoken) =>
+                        setUnlistedUnbilledReason((prev) =>
+                          appendTranscript(prev, spoken)
+                        )
+                      }
+                    />
+                  </div>
                   <input
                     type="text"
                     required
@@ -4229,30 +4708,38 @@ export function NowClient({
                   <label className="block text-xs font-bold uppercase text-slate-400">
                     Target (Mins / Unit)
                   </label>
-                  <label className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-300 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={targetNotApplicable}
-                      onChange={(e) => {
-                        setTargetNotApplicable(e.target.checked);
-                        if (e.target.checked) {
-                          setTaskEditModal({
-                            ...taskEditModal,
-                            standard_minutes: null,
-                          });
-                        }
-                      }}
-                      className="w-3.5 h-3.5 rounded accent-amber-400"
-                    />
-                    Target N/A
-                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentlyEnabled =
+                        !targetNotApplicable && (taskEditModal.target_enabled ?? true);
+                      setTargetNotApplicable(currentlyEnabled);
+                      setTaskEditModal({
+                        ...taskEditModal,
+                        target_enabled: !currentlyEnabled,
+                      });
+                    }}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase border transition ${
+                      !targetNotApplicable && (taskEditModal.target_enabled ?? true)
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    {!targetNotApplicable && (taskEditModal.target_enabled ?? true)
+                      ? 'Target: ON'
+                      : 'Target: OFF'}
+                  </button>
                 </div>
                 <input
                   type="number"
                   step="0.01"
-                  disabled={targetNotApplicable}
-                  required={!targetNotApplicable}
-                  value={targetNotApplicable ? '' : (taskEditModal.standard_minutes ?? '')}
+                  disabled={targetNotApplicable || taskEditModal.target_enabled === false}
+                  required={!targetNotApplicable && taskEditModal.target_enabled !== false}
+                  value={
+                    targetNotApplicable || taskEditModal.target_enabled === false
+                      ? ''
+                      : (taskEditModal.standard_minutes ?? '')
+                  }
                   onChange={(e) =>
                     setTaskEditModal({
                       ...taskEditModal,
@@ -4260,10 +4747,15 @@ export function NowClient({
                         e.target.value === '' ? null : Number(e.target.value),
                     })
                   }
-                  placeholder={targetNotApplicable ? 'No target (N/A)' : 'e.g. 0.50'}
+                  placeholder={
+                    targetNotApplicable || taskEditModal.target_enabled === false
+                      ? 'Target toggled OFF'
+                      : 'e.g. 0.50'
+                  }
                   className="w-full h-11 px-3 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold disabled:opacity-50"
                 />
                 {!targetNotApplicable &&
+                  taskEditModal.target_enabled !== false &&
                   taskEditModal.standard_minutes &&
                   Number(taskEditModal.standard_minutes) > 0 && (
                     <div className="text-[10px] font-semibold text-emerald-400 mt-1">
@@ -4671,9 +5163,16 @@ export function NowClient({
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">
-                  Quick Note (Optional)
-                </label>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <label className="block text-xs font-bold uppercase text-slate-400">
+                    Quick Note (Optional)
+                  </label>
+                  <VoiceMicButton
+                    onTranscript={(spoken) =>
+                      setWrongTaskReason((prev) => appendTranscript(prev, spoken))
+                    }
+                  />
+                </div>
                 <input
                   type="text"
                   value={wrongTaskReason}
@@ -4721,7 +5220,11 @@ export function NowClient({
                 <h3 className="text-2xl font-black text-white">
                   {stopIsMistake
                     ? 'Cancel Accidental Timer'
-                    : `How many ${runningEntry.unit_label || 'units'} completed?`}
+                    : `How many ${
+                        isGoodsInRunningEntry(runningEntry)
+                          ? stopGoodsInUnitType
+                          : runningEntry.unit_label || 'units'
+                      } completed?`}
                 </h3>
                 <p className="text-xs text-slate-400">
                   {runningEntry.client_name} · {runningEntry.task_name}
@@ -4751,12 +5254,55 @@ export function NowClient({
 
             {!stopIsMistake && (
               <>
+                {/* GOODS-IN UNIT TYPE SELECTOR AT END OF TASK (CONTAINERS / PALLETS / BOXES) */}
+                {isGoodsInRunningEntry(runningEntry) && (
+                  <div className="p-3 rounded-2xl bg-sky-950/35 border border-sky-500/40 space-y-2">
+                    <div className="text-[11px] font-black uppercase tracking-wider text-sky-300">
+                      Select Goods-In Unit Type Completed (e.g. 1 Container or 5 Pallets):
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(
+                        [
+                          { key: 'containers', label: '📦 Containers', std: '120m std' },
+                          { key: 'pallets', label: '🪵 Pallets', std: '10m std' },
+                          { key: 'boxes', label: '📫 Boxes', std: '1.5m std' },
+                        ] as const
+                      ).map((opt) => {
+                        const active = stopGoodsInUnitType === opt.key;
+                        return (
+                          <button
+                            key={opt.key}
+                            type="button"
+                            onClick={() => setStopGoodsInUnitType(opt.key)}
+                            className={`py-2.5 px-2 rounded-xl border text-center transition ${
+                              active
+                                ? 'bg-sky-500 text-slate-950 border-sky-300 font-black shadow-md shadow-sky-500/20'
+                                : 'bg-slate-950 hover:bg-slate-900 text-sky-200 border-sky-500/35 font-bold'
+                            }`}
+                          >
+                            <div className="text-xs leading-tight">{opt.label}</div>
+                            <div
+                              className={`text-[10px] mt-0.5 font-mono ${
+                                active ? 'text-slate-900 font-bold' : 'text-slate-400'
+                              }`}
+                            >
+                              {opt.std}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div className="h-16 px-4 rounded-xl bg-slate-950 border-2 border-emerald-500/60 flex items-center justify-between">
                   <span className="text-3xl font-black font-mono text-white">
                     {stopUnitsValue || '0'}
                   </span>
                   <span className="text-sm font-bold uppercase text-emerald-400">
-                    {runningEntry.unit_label || 'units'}
+                    {isGoodsInRunningEntry(runningEntry)
+                      ? stopGoodsInUnitType
+                      : runningEntry.unit_label || 'units'}
                   </span>
                 </div>
 
@@ -4794,6 +5340,77 @@ export function NowClient({
                     <Delete className="w-6 h-6" />
                   </button>
                 </div>
+
+                {/* BELOW 75% OF TARGET EXPLANATION BOX (OPTIONAL WITH VOICE MIC) */}
+                {(() => {
+                  const isGoodsIn = isGoodsInRunningEntry(runningEntry);
+                  const goodsInVariant = isGoodsIn
+                    ? resolveGoodsInVariantTask(stopGoodsInUnitType)
+                    : undefined;
+                  const matchedTask =
+                    goodsInVariant ||
+                    taskTypes.find((t) => t.id === runningEntry.task_type_id);
+                  const effectiveStdMins =
+                    goodsInVariant?.standard_minutes ??
+                    runningEntry.standard_minutes ??
+                    matchedTask?.standard_minutes ??
+                    null;
+                  const effectiveUnitLabel = isGoodsIn
+                    ? stopGoodsInUnitType
+                    : runningEntry.unit_label || matchedTask?.unit_label || 'units';
+                  const targetEnabled =
+                    matchedTask?.target_enabled !== undefined
+                      ? matchedTask.target_enabled
+                      : effectiveStdMins !== null &&
+                        effectiveStdMins !== undefined &&
+                        effectiveStdMins > 0;
+                  const typedNum = parseInt(stopUnitsValue.trim(), 10);
+                  const actualMins = Math.max(0.25, elapsedSeconds / 60);
+                  if (
+                    !targetEnabled ||
+                    !effectiveStdMins ||
+                    Number.isNaN(typedNum) ||
+                    typedNum <= 0
+                  ) {
+                    return null;
+                  }
+                  const pacePct = calculateActualVsStandardPercent({
+                    standardMinutes: effectiveStdMins,
+                    unitLabel: effectiveUnitLabel,
+                    actualMinutes: actualMins,
+                    units: typedNum,
+                  });
+                  if (pacePct === null || pacePct >= 75) return null;
+
+                  return (
+                    <div className="p-3.5 rounded-2xl bg-amber-950/35 border border-amber-500/45 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <div className="text-xs font-black uppercase tracking-wider text-amber-300">
+                            Pace Below 75% of Target ({pacePct}% vs Std) — Optional Explanation
+                          </div>
+                          <div className="text-[11px] text-slate-300">
+                            Would you like to leave a quick note explaining why this run took longer (e.g. damaged stock, mixed pallet, waiting on forklift)?
+                          </div>
+                        </div>
+                        <VoiceMicButton
+                          onTranscript={(spoken) =>
+                            setBelow75Explanation((prev) =>
+                              appendTranscript(prev, spoken)
+                            )
+                          }
+                        />
+                      </div>
+                      <textarea
+                        rows={2}
+                        value={below75Explanation}
+                        onChange={(e) => setBelow75Explanation(e.target.value)}
+                        placeholder="Press 🎤 Speak or type an optional explanation..."
+                        className="w-full p-2.5 rounded-xl bg-slate-950 border border-amber-500/50 text-white text-xs font-semibold focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                  );
+                })()}
               </>
             )}
 
@@ -4818,14 +5435,28 @@ export function NowClient({
                 </label>
 
                 {stopIsMistake && (
-                  <input
-                    type="text"
-                    required
-                    value={stopMistakeReason}
-                    onChange={(e) => setStopMistakeReason(e.target.value)}
-                    placeholder="Reason (e.g. Pressed start by accident, didn't do task)..."
-                    className="w-full h-10 px-3 rounded-xl bg-slate-900 border border-rose-500/50 text-white text-xs font-semibold"
-                  />
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold text-rose-300">
+                        Reason for Mistake (Speak or Type)
+                      </span>
+                      <VoiceMicButton
+                        onTranscript={(spoken) =>
+                          setStopMistakeReason((prev) =>
+                            appendTranscript(prev, spoken)
+                          )
+                        }
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      value={stopMistakeReason}
+                      onChange={(e) => setStopMistakeReason(e.target.value)}
+                      placeholder="Reason (e.g. Pressed start by accident, didn't do task)..."
+                      className="w-full h-10 px-3 rounded-xl bg-slate-900 border border-rose-500/50 text-white text-xs font-semibold"
+                    />
+                  </div>
                 )}
               </div>
             )}
@@ -4884,7 +5515,10 @@ export function NowClient({
                         setShowZeroActivityConfirmModal(true);
                         return;
                       }
-                      completeStopOrSwitchWithUnits(num);
+                      const paceNote = below75Explanation.trim()
+                        ? `[Pace <75% Note: ${below75Explanation.trim()}]`
+                        : null;
+                      completeStopOrSwitchWithUnits(num, paceNote);
                     }}
                     className="btn-glove-lg rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-base flex items-center justify-center gap-2"
                   >
@@ -4898,7 +5532,7 @@ export function NowClient({
         </div>
       )}
 
-      {/* SECOND WINDOW: CONFIRM ZERO ACTIVITY MODAL (RED WARNING — ITEM #12) */}
+      {/* SECOND WINDOW: CONFIRM ZERO ACTIVITY MODAL (RED WARNING — ITEM #12 + EXPLANATION BOX) */}
       {showZeroActivityConfirmModal && runningEntry && (
         <div className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-slate-900 border-2 border-rose-500 rounded-3xl p-6 shadow-2xl space-y-5">
@@ -4937,6 +5571,28 @@ export function NowClient({
               </p>
             </div>
 
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <label className="block text-xs font-black uppercase tracking-wider text-rose-300">
+                  Why was 0 productivity recorded in this time period? *
+                </label>
+                <VoiceMicButton
+                  onTranscript={(spoken) =>
+                    setZeroProductivityReason((prev) =>
+                      appendTranscript(prev, spoken)
+                    )
+                  }
+                />
+              </div>
+              <textarea
+                rows={3}
+                value={zeroProductivityReason}
+                onChange={(e) => setZeroProductivityReason(e.target.value)}
+                placeholder="Press 🎤 Speak or type why 0 units were completed (e.g. waiting for stock, prepping pallets, called away by supervisor)..."
+                className="w-full p-3 rounded-xl bg-slate-950 border border-rose-500/60 text-white text-xs font-semibold focus:outline-none focus:border-rose-400"
+              />
+            </div>
+
             <div className="grid grid-cols-2 gap-3 pt-1">
               <button
                 type="button"
@@ -4951,7 +5607,10 @@ export function NowClient({
                 disabled={busy}
                 onClick={() => {
                   setShowZeroActivityConfirmModal(false);
-                  completeStopOrSwitchWithUnits(pendingZeroUnitsValue);
+                  const zeroNote = `[0 Units Reason: ${
+                    zeroProductivityReason.trim() || 'Confirmed 0 units completed'
+                  }]`;
+                  completeStopOrSwitchWithUnits(pendingZeroUnitsValue, zeroNote);
                 }}
                 className="btn-glove-lg rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-black text-sm flex items-center justify-center gap-1.5 shadow-lg shadow-rose-600/30"
               >
@@ -5008,9 +5667,18 @@ export function NowClient({
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-rose-300 mb-1.5">
-                Why is this unbilled? (Mandatory Justification for K & Finance)*
-              </label>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-rose-300">
+                  Why is this unbilled? (Mandatory Justification for K & Finance)*
+                </label>
+                <VoiceMicButton
+                  onTranscript={(spoken) =>
+                    setUnbillJustification((prev) =>
+                      appendTranscript(prev, spoken)
+                    )
+                  }
+                />
+              </div>
               <textarea
                 required
                 rows={3}

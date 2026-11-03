@@ -11,13 +11,15 @@ export interface UserPublic {
   job_title?: string | null;
   team_name?: string | null;
   is_core_warehouse?: boolean;
+  email?: string | null;
+  must_change_pin?: boolean;
   active: boolean;
   created_at: string;
   updated_at: string;
 }
 
 export interface UserAdmin extends UserPublic {
-  email?: string;
+  email?: string | null;
   pin_hash: string | null;
   hourly_cost: number | null;
 }
@@ -53,6 +55,7 @@ export interface TaskType {
   rounding_minutes?: number | null;
   min_charge_minutes?: number | null;
   standard_minutes: number | null;
+  target_enabled?: boolean;
   unit_label: string | null;
   require_units_on_close?: boolean;
   billable: boolean;
@@ -101,6 +104,7 @@ export interface TimeEntry {
   task_min_charge_minutes?: number | null;
   unit_label?: string | null;
   require_units_on_close?: boolean;
+  target_enabled?: boolean;
   standard_minutes?: number | null;
   order_ref: string | null;
   started_at: string;
@@ -255,7 +259,16 @@ export interface TaskTargetAnalysis {
 
 export type FeedbackType = 'bug' | 'feature';
 export type FeedbackSeverity = 'low' | 'medium' | 'high' | 'critical';
-export type FeedbackStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+export type FeedbackStatus = 'open' | 'planned' | 'in_progress' | 'resolved' | 'closed';
+
+export interface FeedbackUpdateItem {
+  id: string;
+  author_name: string;
+  author_role: string;
+  status: FeedbackStatus;
+  note: string;
+  created_at: string;
+}
 
 export interface FeedbackReport {
   id: string;
@@ -269,6 +282,8 @@ export interface FeedbackReport {
   reporter_role: string;
   status: FeedbackStatus;
   admin_note: string | null;
+  attachments?: string[];
+  updates_log?: FeedbackUpdateItem[];
   created_at: string;
   updated_at: string;
 }

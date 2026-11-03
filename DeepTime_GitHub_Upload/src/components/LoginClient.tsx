@@ -1,10 +1,17 @@
 'use client';
 
 import { loginByPinAction, loginStaffAction } from '@/app/actions';
-import { getRoleBadgeClass } from '@/lib/roleBadge';
+import {
+  ADDITIONAL_GROUP_ORDER,
+  getAdditionalStaffGroupLabel,
+  getRoleBadgeClass,
+  isPrimaryStaffMember,
+  sortCoreStaffFirst,
+} from '@/lib/roleBadge';
 import { UserPublic } from '@/lib/types';
 import {
   ArrowRight,
+  ChevronDown,
   Delete,
   KeyRound,
   Lock,
@@ -37,17 +44,27 @@ export function LoginClient({ operatives }: LoginClientProps) {
   // Operative PIN state
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [showOtherLoginStaff, setShowOtherLoginStaff] = useState(false);
+  const [openLoginDepts, setOpenLoginDepts] = useState<Record<string, boolean>>({});
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  const sortedOperatives = React.useMemo(
+    () => sortCoreStaffFirst(operatives),
+    [operatives]
+  );
 
   // Staff email/password state
   const [email, setEmail] = useState('josh@cloud9fulfilment.co.uk');
   const [password, setPassword] = useState('password123');
   const [launchAsKiosk, setLaunchAsKiosk] = useState(false);
 
-  const submitPin = async (pinToSubmit: string, userIdOverride?: string) => {
+  const submitPin = async (
+    pinToSubmit: string,
+    userIdOverride?: string,
+    oneClickUserId?: string
+  ) => {
     if (pinLoading) return;
-    if (pinToSubmit.length !== 4) {
+    if (!oneClickUserId && pinToSubmit.length !== 4) {
       setError('Please enter a 4-digit PIN.');
       return;
     }
@@ -58,6 +75,7 @@ export function LoginClient({ operatives }: LoginClientProps) {
       const res = await loginByPinAction({
         pin: pinToSubmit,
         userId: (userIdOverride ?? selectedUserId) || undefined,
+        oneClickUserId,
         clockInIfNeeded: true,
       });
 
@@ -223,11 +241,32 @@ export function LoginClient({ operatives }: LoginClientProps) {
                 className="w-full h-14 px-4 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-sm focus:outline-none focus:border-emerald-500"
               >
                 <option value="">Any User (Match by 4-Digit PIN)</option>
-                {operatives.map((op) => (
-                  <option key={op.id} value={op.id}>
-                    {op.display_name} — {op.job_title || op.role}
-                  </option>
-                ))}
+                <optgroup label="⭐ Supervisors (Mark & Edna) & Core Warehouse">
+                  {sortedOperatives
+                    .filter((op) => isPrimaryStaffMember(op))
+                    .map((op) => (
+                      <option key={op.id} value={op.id}>
+                        {op.display_name} — {op.job_title || op.role}
+                      </option>
+                    ))}
+                </optgroup>
+                {ADDITIONAL_GROUP_ORDER.map((deptLabel) => {
+                  const deptMembers = sortedOperatives.filter(
+                    (op) =>
+                      !isPrimaryStaffMember(op) &&
+                      getAdditionalStaffGroupLabel(op) === deptLabel
+                  );
+                  if (deptMembers.length === 0) return null;
+                  return (
+                    <optgroup key={deptLabel} label={`Additional Staff — ${deptLabel}`}>
+                      {deptMembers.map((op) => (
+                        <option key={op.id} value={op.id}>
+                          {op.display_name} — {op.job_title || op.role}
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
               </select>
             </div>
 
@@ -308,28 +347,31 @@ export function LoginClient({ operatives }: LoginClientProps) {
               <ArrowRight className="w-5 h-5" />
             </button>
 
-            {/* Core Warehouse Team + Collapsible Other Team Members */}
+            {/* Mark & Edna First + Core Warehouse Operatives + Collapsible Additional Staff by Department */}
             <div className="mt-6 pt-4 border-t border-slate-800 text-xs text-slate-400 space-y-2.5">
               <div className="font-bold text-slate-300 uppercase tracking-wider">
-                Core Warehouse Team (1-Click PIN Sign-In):
+                1-Click PIN Sign-In (Mark &amp; Edna + Core Warehouse Team):
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {[
+                  { name: 'Mark', role: 'Supervisor • Core Warehouse', pin: '4444' },
+                  { name: 'Edna', role: 'Supervisor • Core Warehouse', pin: '4445' },
                   { name: 'Erica', role: 'Core Warehouse Operative', pin: '1111' },
                   { name: 'Sam', role: 'Core Warehouse Operative', pin: '2222' },
                   { name: 'Alex', role: 'Core Warehouse Operative', pin: '3333' },
                   { name: 'Mason', role: 'Core Warehouse Operative', pin: '1004' },
-                  { name: 'Mark', role: 'Supervisor • Core Warehouse', pin: '4444' },
-                  { name: 'Edna', role: 'Supervisor • Core Warehouse', pin: '4445' },
-                  { name: 'Josh', role: 'CEO, Builder & Admin', pin: '9999' },
-                ].map((m) => (
+                ].map((m) => {
+                  const matchedOp = sortedOperatives.find(
+                    (op) => op.display_name.toLowerCase() === m.name.toLowerCase()
+                  );
+                  return (
                   <button
                     key={m.pin}
                     type="button"
                     disabled={pinLoading}
                     onClick={() => {
                       setPin(m.pin);
-                      submitPin(m.pin);
+                      submitPin(m.pin, matchedOp?.id, matchedOp?.id);
                     }}
                     className="p-2 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left transition"
                   >
@@ -345,59 +387,126 @@ export function LoginClient({ operatives }: LoginClientProps) {
                     </div>
                     <div className="text-emerald-400 font-mono text-[10px]">PIN: {m.pin}</div>
                   </button>
-                ))}
+                  );
+                })}
               </div>
 
               <button
                 type="button"
                 onClick={() => setShowOtherLoginStaff((prev) => !prev)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left font-bold text-slate-300 flex items-center justify-between transition"
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left font-bold text-slate-200 flex items-center justify-between transition"
               >
                 <span>
-                  {showOtherLoginStaff ? '▾ Hide' : '▸ Show'} Other Team Members (10)
+                  {showOtherLoginStaff ? '▾ Hide' : '▸ Show'} Additional Staff Members (11)
                 </span>
-                <span className="text-[10px] text-slate-400 font-normal truncate max-w-[180px]">
-                  Ben, Jess, Sabine, Dan Igel, Billy, Mike, Ray, Adrian, Danny, Ashton
+                <span className="text-[10px] text-sky-400 font-semibold">
+                  Grouped by Department / Role
                 </span>
               </button>
 
               {showOtherLoginStaff && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+                <div className="space-y-2 pt-1">
                   {[
-                    { name: 'Ben', role: 'CCELL Operative', pin: '1005' },
-                    { name: 'Jess', role: 'Warehouse Operative', pin: '1006' },
-                    { name: 'Sabine', role: 'Warehouse Operative', pin: '1007' },
-                    { name: 'Dan Igel', role: 'Head of People & Operations', pin: '1008' },
-                    { name: 'Billy', role: 'Operations', pin: '1009' },
-                    { name: 'Mike', role: 'Sales', pin: '1010' },
-                    { name: 'Ray', role: 'Sales • Warehouse Operative', pin: '1011' },
-                    { name: 'Adrian', role: 'Marketing & Innovations', pin: '1012' },
-                    { name: 'Danny', role: 'Marketing & Innovations', pin: '1013' },
-                    { name: 'Ashton', role: 'Marketing & Innovations', pin: '1014' },
-                  ].map((m) => (
-                    <button
-                      key={m.pin}
-                      type="button"
-                      disabled={pinLoading}
-                      onClick={() => {
-                        setPin(m.pin);
-                        submitPin(m.pin);
-                      }}
-                      className="p-2 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left transition"
-                    >
-                      <div className="font-bold text-white text-xs">{m.name}</div>
-                      <div className="mt-1 mb-0.5">
-                        <span
-                          className={`inline-block px-1.5 py-0.5 rounded border text-[9px] font-bold truncate max-w-full ${getRoleBadgeClass(
-                            m.role
-                          )}`}
+                    {
+                      dept: 'CCELL & Warehouse Support',
+                      members: [
+                        { name: 'Ben', role: 'CCELL Operative', pin: '1005' },
+                        { name: 'Jess', role: 'Warehouse Operative', pin: '1006' },
+                        { name: 'Sabine', role: 'Warehouse Operative', pin: '1007' },
+                      ],
+                    },
+                    {
+                      dept: 'People & Operations',
+                      members: [
+                        { name: 'Dan Igel', role: 'Head of People & Operations', pin: '1008' },
+                        { name: 'Billy', role: 'Operations', pin: '1009' },
+                      ],
+                    },
+                    {
+                      dept: 'Sales Team',
+                      members: [
+                        { name: 'Mike', role: 'Sales', pin: '1010' },
+                        { name: 'Ray', role: 'Sales • Warehouse Operative', pin: '1011' },
+                      ],
+                    },
+                    {
+                      dept: 'Marketing & Innovations',
+                      members: [
+                        { name: 'Adrian', role: 'Marketing & Innovations', pin: '1012' },
+                        { name: 'Danny', role: 'Marketing & Innovations', pin: '1013' },
+                        { name: 'Ashton', role: 'Marketing & Innovations', pin: '1014' },
+                      ],
+                    },
+                    {
+                      dept: 'Executive & Admin',
+                      members: [
+                        { name: 'Josh', role: 'CEO, Builder & Admin', pin: '9999' },
+                      ],
+                    },
+                  ].map((group) => {
+                    const isOpen = openLoginDepts[group.dept] ?? true;
+                    return (
+                      <div
+                        key={group.dept}
+                        className="rounded-xl border border-slate-800 bg-slate-950/80 overflow-hidden"
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOpenLoginDepts((prev) => ({
+                              ...prev,
+                              [group.dept]: !isOpen,
+                            }))
+                          }
+                          className="w-full px-3 py-2 flex items-center justify-between text-left bg-slate-900/70 hover:bg-slate-800/80 transition"
                         >
-                          {m.role}
-                        </span>
+                          <span className="text-[11px] font-black uppercase tracking-wider text-amber-300">
+                            {group.dept} ({group.members.length})
+                          </span>
+                          <ChevronDown
+                            className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
+                              isOpen ? 'rotate-180' : ''
+                            }`}
+                          />
+                        </button>
+                        {isOpen && (
+                          <div className="p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {group.members.map((m) => {
+                              const matchedOp = sortedOperatives.find(
+                                (op) => op.display_name.toLowerCase() === m.name.toLowerCase()
+                              );
+                              return (
+                              <button
+                                key={m.pin}
+                                type="button"
+                                disabled={pinLoading}
+                                onClick={() => {
+                                  setPin(m.pin);
+                                  submitPin(m.pin, matchedOp?.id, matchedOp?.id);
+                                }}
+                                className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-left transition"
+                              >
+                                <div className="font-bold text-white text-xs">{m.name}</div>
+                                <div className="mt-1 mb-0.5">
+                                  <span
+                                    className={`inline-block px-1.5 py-0.5 rounded border text-[9px] font-bold truncate max-w-full ${getRoleBadgeClass(
+                                      m.role
+                                    )}`}
+                                  >
+                                    {m.role}
+                                  </span>
+                                </div>
+                                <div className="text-emerald-400 font-mono text-[10px]">
+                                  PIN: {m.pin}
+                                </div>
+                              </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                      <div className="text-emerald-400 font-mono text-[10px]">PIN: {m.pin}</div>
-                    </button>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -473,23 +582,6 @@ export function LoginClient({ operatives }: LoginClientProps) {
                   type="button"
                   disabled={staffLoading}
                   onClick={() => {
-                    setEmail('josh@cloud9fulfilment.co.uk');
-                    setPassword('password123');
-                    executeStaffLogin('josh@cloud9fulfilment.co.uk', 'password123');
-                  }}
-                  className="p-2.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-amber-500/40 text-left"
-                >
-                  <div className="font-bold text-white flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                    Josh
-                  </div>
-                  <div className="text-[10px] text-amber-300 font-bold">CEO, Builder &amp; Admin</div>
-                  <div className="text-[10px] text-slate-400">PIN: 9999</div>
-                </button>
-                <button
-                  type="button"
-                  disabled={staffLoading}
-                  onClick={() => {
                     setEmail('mark@cloud9fulfilment.co.uk');
                     setPassword('password123');
                     executeStaffLogin('mark@cloud9fulfilment.co.uk', 'password123');
@@ -519,6 +611,23 @@ export function LoginClient({ operatives }: LoginClientProps) {
                   </div>
                   <div className="text-[10px] text-emerald-300 font-bold">Supervisor • Core WH</div>
                   <div className="text-[10px] text-slate-400">PIN: 4445</div>
+                </button>
+                <button
+                  type="button"
+                  disabled={staffLoading}
+                  onClick={() => {
+                    setEmail('josh@cloud9fulfilment.co.uk');
+                    setPassword('password123');
+                    executeStaffLogin('josh@cloud9fulfilment.co.uk', 'password123');
+                  }}
+                  className="p-2.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-amber-500/40 text-left"
+                >
+                  <div className="font-bold text-white flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                    Josh
+                  </div>
+                  <div className="text-[10px] text-amber-300 font-bold">CEO, Builder &amp; Admin</div>
+                  <div className="text-[10px] text-slate-400">PIN: 9999</div>
                 </button>
               </div>
             </div>

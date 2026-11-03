@@ -285,6 +285,25 @@ html.light .shadow-lg {
   @apply font-extrabold tracking-wide transition-all duration-150 active:scale-[0.99] select-none;
 }
 
+/* Android / Mobile Handheld Touch Optimizations (Eliminate 300ms delay & accidental double-tap zoom on tally buttons) */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important; /* Prevent mobile browser auto-zoom on focus */
+  }
+}
+
 /* ============================================================================
    Design Spec v4 — Clarity Pass (Tron Palette, Edge Glows & Typography)
    ============================================================================ */

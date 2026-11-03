@@ -37,16 +37,21 @@ export async function getSettings(actorUserId: string | null = null): Promise<Ap
 export async function getActiveOperativesAndStaff(): Promise<UserPublic[]> {
   return withDbSession(null, async (tx) => {
     const res = await tx.query<UserPublic>(
-      `select id, display_name, role, job_title, team_name, coalesce(is_core_warehouse, false) as is_core_warehouse, active, created_at::text, updated_at::text
+      `select id, display_name, role, job_title, team_name, coalesce(is_core_warehouse, false) as is_core_warehouse, email, coalesce(must_change_pin, false) as must_change_pin, active, created_at::text, updated_at::text
        from users_public
        where active = true
        order by
-         coalesce(is_core_warehouse, false) desc,
-         case role
-           when 'operative' then 1
-           when 'supervisor' then 2
-           when 'admin' then 3
-           else 4
+         case
+           when lower(display_name) = 'mark' then 1
+           when lower(display_name) = 'edna' then 2
+           when role = 'supervisor' then 3
+           when lower(display_name) = 'erica' then 4
+           when lower(display_name) = 'sam' then 5
+           when lower(display_name) = 'alex' then 6
+           when lower(display_name) = 'mason' then 7
+           when coalesce(is_core_warehouse, false) = true then 8
+           when role = 'admin' then 9
+           else 20
          end,
          display_name asc`
     );
@@ -108,6 +113,7 @@ export async function getActiveTaskTypes(actorUserId: string | null = null): Pro
          t.rounding_minutes,
          coalesce(t.min_charge_minutes, 0) as min_charge_minutes,
          t.standard_minutes::float8 as standard_minutes,
+         coalesce(t.target_enabled, true) as target_enabled,
          t.unit_label,
          coalesce(t.require_units_on_close, true) as require_units_on_close,
          t.billable,
@@ -139,6 +145,7 @@ export async function getAllTaskTypes(actorUserId: string | null = null): Promis
          t.rounding_minutes,
          coalesce(t.min_charge_minutes, 0) as min_charge_minutes,
          t.standard_minutes::float8 as standard_minutes,
+         coalesce(t.target_enabled, true) as target_enabled,
          t.unit_label,
          coalesce(t.require_units_on_close, true) as require_units_on_close,
          t.billable,
@@ -164,7 +171,8 @@ export async function getOperativeNowData(userId: string) {
          e.task_type_id, t.name as task_name, t.code as task_code,
          t.unit_label,
          coalesce(t.require_units_on_close, true) as require_units_on_close,
-         t.standard_minutes::float8 as standard_minutes,
+         coalesce(t.target_enabled, true) as target_enabled,
+         case when coalesce(t.target_enabled, true) = false then null else t.standard_minutes::float8 end as standard_minutes,
          e.order_ref, e.started_at::text, e.ended_at::text,
          e.units, e.billable,
          coalesce(e.billing_status, case when e.billable = false then 'our_cost' else 'needs_billed' end) as billing_status,
@@ -191,7 +199,8 @@ export async function getOperativeNowData(userId: string) {
          e.task_type_id, t.name as task_name, t.code as task_code,
          t.unit_label,
          coalesce(t.require_units_on_close, true) as require_units_on_close,
-         t.standard_minutes::float8 as standard_minutes,
+         coalesce(t.target_enabled, true) as target_enabled,
+         case when coalesce(t.target_enabled, true) = false then null else t.standard_minutes::float8 end as standard_minutes,
          e.order_ref, e.started_at::text, e.ended_at::text,
          e.units, e.billable,
          coalesce(e.billing_status, case when e.billable = false then 'our_cost' else 'needs_billed' end) as billing_status,
@@ -295,10 +304,22 @@ export async function getOperativeNowData(userId: string) {
 export async function getFloorStatus(actorUserId: string | null = null) {
   return withDbSession(actorUserId, async (tx) => {
     const operativesRes = await tx.query<UserPublic>(
-      `select id, display_name, role, job_title, team_name, coalesce(is_core_warehouse, false) as is_core_warehouse, active, created_at::text, updated_at::text
+      `select id, display_name, role, job_title, team_name, coalesce(is_core_warehouse, false) as is_core_warehouse, email, coalesce(must_change_pin, false) as must_change_pin, active, created_at::text, updated_at::text
        from users_public
-       where active = true and role = 'operative'
-       order by coalesce(is_core_warehouse, false) desc, display_name asc`
+       where active = true and role in ('supervisor', 'operative')
+       order by
+         case
+           when lower(display_name) = 'mark' then 1
+           when lower(display_name) = 'edna' then 2
+           when role = 'supervisor' then 3
+           when lower(display_name) = 'erica' then 4
+           when lower(display_name) = 'sam' then 5
+           when lower(display_name) = 'alex' then 6
+           when lower(display_name) = 'mason' then 7
+           when coalesce(is_core_warehouse, false) = true then 8
+           else 20
+         end,
+         display_name asc`
     );
 
     const openAttendanceRes = await tx.query<Attendance>(
@@ -314,7 +335,8 @@ export async function getFloorStatus(actorUserId: string | null = null) {
          e.task_type_id, t.name as task_name, t.code as task_code,
          t.unit_label,
          coalesce(t.require_units_on_close, true) as require_units_on_close,
-         t.standard_minutes::float8 as standard_minutes,
+         coalesce(t.target_enabled, true) as target_enabled,
+         case when coalesce(t.target_enabled, true) = false then null else t.standard_minutes::float8 end as standard_minutes,
          e.order_ref, e.started_at::text, e.ended_at::text,
          e.units, e.billable,
          coalesce(e.billing_status, case when e.billable = false then 'our_cost' else 'needs_billed' end) as billing_status,
@@ -338,7 +360,8 @@ export async function getFloorStatus(actorUserId: string | null = null) {
          e.task_type_id, t.name as task_name, t.code as task_code,
          t.unit_label,
          coalesce(t.require_units_on_close, true) as require_units_on_close,
-         t.standard_minutes::float8 as standard_minutes,
+         coalesce(t.target_enabled, true) as target_enabled,
+         case when coalesce(t.target_enabled, true) = false then null else t.standard_minutes::float8 end as standard_minutes,
          e.order_ref, e.started_at::text, e.ended_at::text,
          e.units, e.billable,
          coalesce(e.billing_status, case when e.billable = false then 'our_cost' else 'needs_billed' end) as billing_status,
@@ -405,7 +428,9 @@ export async function getEntriesForDate(dateStr: string, actorUserId: string | n
          e.task_type_id, t.name as task_name, t.code as task_code,
          t.rounding_minutes as task_rounding_minutes,
          coalesce(t.min_charge_minutes, 0) as task_min_charge_minutes,
-         t.unit_label, t.standard_minutes::float8 as standard_minutes,
+         t.unit_label,
+         coalesce(t.target_enabled, true) as target_enabled,
+         case when coalesce(t.target_enabled, true) = false then null else t.standard_minutes::float8 end as standard_minutes,
          e.order_ref, e.started_at::text, e.ended_at::text,
          e.units, e.billable,
          coalesce(e.billing_status, case when e.billable = false then 'our_cost' else 'needs_billed' end) as billing_status,
@@ -554,20 +579,26 @@ export async function getAdminUsers(actorUserId: string): Promise<UserAdmin[]> {
       `select
          u.id, u.display_name, u.role, u.job_title, u.team_name,
          coalesce(u.is_core_warehouse, false) as is_core_warehouse,
+         coalesce(u.must_change_pin, false) as must_change_pin,
          u.pin_hash,
          u.hourly_cost::float8 as hourly_cost,
          u.active, u.created_at::text, u.updated_at::text,
-         au.email
+         coalesce(u.email, au.email) as email
        from users u
        left join auth.users au on au.id = u.id
        order by
-         case u.role
-           when 'admin' then 1
-           when 'supervisor' then 2
-           when 'operative' then 3
-           else 4
+         case
+           when lower(u.display_name) = 'mark' then 1
+           when lower(u.display_name) = 'edna' then 2
+           when u.role = 'supervisor' then 3
+           when lower(u.display_name) = 'erica' then 4
+           when lower(u.display_name) = 'sam' then 5
+           when lower(u.display_name) = 'alex' then 6
+           when lower(u.display_name) = 'mason' then 7
+           when coalesce(u.is_core_warehouse, false) = true then 8
+           when u.role = 'admin' then 9
+           else 20
          end,
-         coalesce(u.is_core_warehouse, false) desc,
          u.display_name asc`
     );
     return res.rows;
