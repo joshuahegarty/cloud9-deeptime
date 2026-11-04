@@ -12,7 +12,7 @@ const txStorage = new AsyncLocalStorage<DbTx>();
 
 const globalForDb = globalThis as unknown as {
   __deeptimePgPromise?: Promise<PGlite>;
-  __deeptimeMigratedV17?: boolean;
+  __deeptimeMigratedV18?: boolean;
   __deeptimeMutex?: Promise<unknown>;
   __deeptimeRealtimeVersion?: number;
 };
@@ -956,6 +956,7 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
 async function applySchemaAndSeed(pg: PGlite, includeSeed = true, includeStandardTasks = true) {
   const migrationPath = path.join(process.cwd(), 'supabase', 'migrations', '0001_schema_rls_triggers.sql');
   const schemaSql = fs.readFileSync(migrationPath, 'utf8');
+  await pg.exec('drop view if exists users_public cascade;');
   await pg.exec(schemaSql);
 
   if (includeSeed) {
@@ -982,13 +983,16 @@ export async function getDb(): Promise<PGlite> {
       const pg = new PGlite(dataDir);
       await pg.waitReady;
       await applySchemaAndSeed(pg, true, true);
-      globalForDb.__deeptimeMigratedV17 = true;
+      globalForDb.__deeptimeMigratedV18 = true;
       return pg;
-    })();
-  } else if (!globalForDb.__deeptimeMigratedV17) {
+    })().catch((err) => {
+      delete globalForDb.__deeptimePgPromise;
+      throw err;
+    });
+  } else if (!globalForDb.__deeptimeMigratedV18) {
     const pg = await globalForDb.__deeptimePgPromise;
     await pg.exec(UPGRADE_AND_STANDARD_TASKS_SQL);
-    globalForDb.__deeptimeMigratedV17 = true;
+    globalForDb.__deeptimeMigratedV18 = true;
   }
   return globalForDb.__deeptimePgPromise;
 }
