@@ -1237,6 +1237,28 @@ export function EntriesClient({
    * Fits 12–18 records on a single screen fold while keeping Time, Client/Task,
    * Output, Target Pace %, Team Avg, Billing Status, and Edit/Audit actions crystal clear.
    */
+  const compactGridClass = showDayAverage
+    ? 'lg:grid lg:grid-cols-[168px_minmax(190px,1fr)_148px_148px_112px_148px_138px] lg:items-center lg:gap-0'
+    : 'lg:grid lg:grid-cols-[168px_minmax(190px,1fr)_148px_148px_148px_138px] lg:items-center lg:gap-0';
+
+  const renderCompactColumnHeader = (showOperativeCol = false) => (
+    <div
+      className={`hidden ${compactGridClass} px-3.5 py-2 bg-slate-900/80 border-b border-slate-800 border-l-4 border-l-transparent text-[10px] font-black uppercase tracking-wider text-slate-400 select-none`}
+    >
+      <div className="pr-2.5">Time &amp; Duration</div>
+      <div className="lg:border-l lg:border-slate-800/80 lg:px-3">
+        {showOperativeCol ? 'Operative, Client & Task' : 'Client, Task & Reference'}
+      </div>
+      <div className="lg:border-l lg:border-slate-800/80 lg:px-3">Production Output</div>
+      <div className="lg:border-l lg:border-slate-800/80 lg:px-3">Target Standard</div>
+      {showDayAverage && (
+        <div className="lg:border-l lg:border-slate-800/80 lg:px-3">Today&apos;s Task Avg</div>
+      )}
+      <div className="lg:border-l lg:border-slate-800/80 lg:px-3">Billing</div>
+      <div className="lg:border-l lg:border-slate-800/80 lg:pl-3 text-right">Actions</div>
+    </div>
+  );
+
   const renderCompactEntryRow = (entry: TimeEntry, showOperativeHeader = false) => {
     if (editingId === entry.id) {
       return renderEntryCard(entry, showOperativeHeader);
@@ -1306,13 +1328,13 @@ export function EntriesClient({
           borderLeftColor: entry.auto_stopped ? '#EF4444' : taskHue.borderLeftHex,
           borderLeftWidth: '4px',
         }}
-        className={`px-3.5 py-2.5 border-b border-slate-800/80 last:border-b-0 hover:bg-slate-900/80 transition ${
+        className={`px-3.5 py-2.5 border-b border-slate-800/80 last:border-b-0 hover:bg-slate-900/75 transition ${
           entry.auto_stopped ? 'bg-rose-950/20' : 'bg-slate-950/40'
         }`}
       >
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 lg:gap-3">
-          {/* 1. Time Window & Duration */}
-          <div className="flex items-center justify-between lg:justify-start gap-2 lg:w-[175px] shrink-0">
+        <div className={`flex flex-col gap-2 ${compactGridClass}`}>
+          {/* 1. Time & Duration (168px) */}
+          <div className="flex items-center justify-between lg:justify-between gap-1.5 pr-2.5 min-w-0">
             <span className="font-mono text-xs font-bold text-slate-200 whitespace-nowrap">
               {formatLondonTime(entry.started_at)} →{' '}
               {isRunning ? (
@@ -1322,7 +1344,7 @@ export function EntriesClient({
               )}
             </span>
             <span
-              className={`px-2 py-0.5 rounded-md font-mono text-[11px] font-black whitespace-nowrap ${
+              className={`px-1.5 py-0.5 rounded-md font-mono text-[11px] font-black whitespace-nowrap shrink-0 ${
                 isRunning
                   ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
                   : 'bg-slate-900 text-emerald-400 border border-slate-800'
@@ -1332,8 +1354,8 @@ export function EntriesClient({
             </span>
           </div>
 
-          {/* 2. Operative (if Task Mode) + Client & Task Name + Inline Ref/Note */}
-          <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
+          {/* 2. Client, Task & Reference (1fr) */}
+          <div className="flex flex-wrap items-center gap-1.5 min-w-0 lg:border-l lg:border-slate-800/60 lg:px-3">
             {showOperativeHeader && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900 border border-slate-700 text-white font-bold text-xs shrink-0">
                 <User className="w-3 h-3 text-emerald-400" />
@@ -1346,68 +1368,71 @@ export function EntriesClient({
             <span className="text-xs sm:text-sm font-bold text-white truncate">
               {entry.task_name}
             </span>
-            <span className="font-mono text-[10px] text-slate-400 hidden sm:inline">
+            <span className="font-mono text-[10px] text-slate-400 hidden sm:inline shrink-0">
               ({entry.task_code || 'TASK'})
             </span>
             {entry.order_ref && (
-              <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 font-mono text-[10px] font-bold text-amber-300 truncate max-w-[160px]">
+              <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 font-mono text-[10px] font-bold text-amber-300 truncate max-w-[155px] shrink-0">
                 Ref: {entry.order_ref}
               </span>
             )}
             {entry.note && (
               <span
-                className="text-[11px] italic text-slate-400 truncate max-w-[220px]"
+                className="text-[11px] italic text-slate-400 truncate max-w-[210px]"
                 title={entry.note}
               >
                 &ldquo;{entry.note}&rdquo;
               </span>
             )}
             {entry.auto_stopped && (
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-600 text-white">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-600 text-white shrink-0">
                 Auto-Stopped
               </span>
             )}
             {billingStatus === 'our_cost' && entry.unbilled_reason && (
-              <span className="px-2 py-0.5 rounded bg-rose-950/60 border border-rose-500/40 text-[10px] font-semibold text-rose-200 truncate max-w-[260px]" title={entry.unbilled_reason}>
+              <span
+                className="px-2 py-0.5 rounded bg-rose-950/60 border border-rose-500/40 text-[10px] font-semibold text-rose-200 truncate max-w-[240px]"
+                title={entry.unbilled_reason}
+              >
                 Justification: {entry.unbilled_reason}
               </span>
             )}
           </div>
 
-          {/* 3. Metrics & Actions Strip */}
-          <div className="flex flex-wrap items-center justify-between lg:justify-end gap-2 sm:gap-3 shrink-0">
-            {/* Production Output */}
-            <div className="flex items-baseline gap-1.5 lg:w-[155px] lg:justify-end">
-              <span className="font-mono text-sm font-black text-white">
+          {/* Mobile Metrics Wrapper (< lg) / Direct Grid Cells (>= lg) */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/50 lg:contents">
+            {/* 3. Production Output (148px) */}
+            <div className="flex items-baseline gap-1.5 min-w-0 lg:border-l lg:border-slate-800/60 lg:px-3">
+              <span className="font-mono text-sm font-black text-white tabular-nums">
                 {entry.units !== null && entry.units !== undefined
                   ? entry.units.toLocaleString()
                   : isRunning
                     ? '—'
                     : '0'}
               </span>
-              <span className="text-[11px] font-bold uppercase text-emerald-400">
+              <span className="text-[11px] font-bold uppercase text-emerald-400 truncate">
                 {unitLabel}
               </span>
               {hasUnits && actualUnitsPerHour !== null && !isShortRun && (
-                <span className="font-mono text-[10px] text-slate-400">
+                <span className="font-mono text-[10px] text-slate-400 whitespace-nowrap">
                   ({actualUnitsPerHour.toFixed(0)}/hr)
                 </span>
               )}
             </div>
 
-            {/* Target & Pace % */}
-            <div className="flex items-center gap-1.5 lg:w-[145px] lg:justify-end">
+            {/* 4. Target Standard (148px) */}
+            <div className="flex items-center gap-1.5 min-w-0 lg:border-l lg:border-slate-800/60 lg:px-3">
               {targetEnabled && standardMinutes ? (
                 <>
                   <span
-                    className="font-mono text-[11px] text-slate-400"
+                    className="font-mono text-[11px] text-slate-300 tabular-nums whitespace-nowrap"
                     title={`Standard: ${standardMinutes.toFixed(2)} min/${unitLabel}`}
                   >
                     🎯 {standardMinutes.toFixed(2)}m
                   </span>
                   {pacePercent !== null ? (
                     <span
-                      className={`px-2 py-0.5 rounded-full font-mono text-[11px] font-black border ${
+                      className={`px-1.5 py-0.5 rounded-full font-mono text-[10px] font-black border tabular-nums whitespace-nowrap ${
                         pacePercent >= 95
                           ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                           : pacePercent >= 75
@@ -1426,14 +1451,14 @@ export function EntriesClient({
               )}
             </div>
 
-            {/* Team Day Avg (Supervisor Only) */}
+            {/* 5. Today's Task Avg (112px — Supervisor View) */}
             {showDayAverage && (
               <div
-                className="hidden xl:flex items-center justify-end gap-1 w-[115px] font-mono text-[11px]"
+                className="flex items-center gap-1 min-w-0 lg:border-l lg:border-slate-800/60 lg:px-3 font-mono text-[11px] tabular-nums"
                 title="Today's Task Avg pace on this task"
               >
                 <span className="text-slate-500">Avg:</span>
-                <span className="text-amber-300 font-bold">
+                <span className="text-amber-300 font-bold whitespace-nowrap">
                   {dayAvgSummary?.avgMinutesPerUnit
                     ? `${dayAvgSummary.avgMinutesPerUnit.toFixed(2)}m`
                     : actualPaceMinPerUnit
@@ -1443,27 +1468,29 @@ export function EntriesClient({
               </div>
             )}
 
-            {/* Billing Status Pill */}
-            <span
-              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide whitespace-nowrap ${billingConfig.badgeClass}`}
-              title={
-                billingStatus === 'our_cost' && entry.unbilled_reason
-                  ? `Our Cost: ${entry.unbilled_reason}`
-                  : billingConfig.description
-              }
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${billingConfig.dotClass}`} />
-              {billingConfig.label}
-            </span>
+            {/* 6. Billing Status (148px) */}
+            <div className="flex items-center min-w-0 lg:border-l lg:border-slate-800/60 lg:px-3">
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide whitespace-nowrap ${billingConfig.badgeClass}`}
+                title={
+                  billingStatus === 'our_cost' && entry.unbilled_reason
+                    ? `Our Cost: ${entry.unbilled_reason}`
+                    : billingConfig.description
+                }
+              >
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${billingConfig.dotClass}`} />
+                {billingConfig.label}
+              </span>
+            </div>
 
-            {/* Action Buttons */}
-            <div className="flex items-center gap-1">
+            {/* 7. Actions (138px — Right-Aligned) */}
+            <div className="flex items-center justify-end gap-1 min-w-0 lg:border-l lg:border-slate-800/60 lg:pl-3">
               {isRunning && isSupervisorOrAbove && (
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() => handleStopEntry(entry.id)}
-                  className="px-2 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold inline-flex items-center gap-1"
+                  className="px-2 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold inline-flex items-center gap-1 shrink-0"
                 >
                   <Square className="w-2.5 h-2.5 fill-current" />
                   Stop
@@ -1473,7 +1500,7 @@ export function EntriesClient({
                 <button
                   type="button"
                   onClick={() => beginInlineEdit(entry)}
-                  className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 text-[11px] font-bold inline-flex items-center gap-1 border border-slate-700"
+                  className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 text-[11px] font-bold inline-flex items-center gap-1 border border-slate-700 shrink-0"
                 >
                   <Pencil className="w-3 h-3" />
                   Edit
@@ -1482,7 +1509,7 @@ export function EntriesClient({
               <button
                 type="button"
                 onClick={() => setExpandedAuditId(isExpanded ? null : entry.id)}
-                className={`px-2 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 border ${
+                className={`px-2 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 border shrink-0 ${
                   audits.length > 0
                     ? 'bg-slate-900 text-emerald-300 border-emerald-500/40'
                     : 'bg-slate-950 text-slate-400 border-slate-800'
@@ -1998,23 +2025,7 @@ export function EntriesClient({
                 </div>
 
                 {/* Column Header Bar in Compact Mode (Desktop) */}
-                {viewDensity === 'compact' && (
-                  <div className="hidden lg:flex items-center justify-between gap-3 px-3.5 py-1.5 bg-slate-900/50 border-b border-slate-800/80 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                    <div className="w-[175px] shrink-0">Time &amp; Duration</div>
-                    <div className="flex-1 min-w-0">Client, Task &amp; Reference</div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <div className="w-[155px] text-right">Production Output</div>
-                      <div className="w-[145px] text-right">Target Standard</div>
-                      {showDayAverage && (
-                        <div className="hidden xl:block w-[115px] text-right">
-                          Today&apos;s Task Avg
-                        </div>
-                      )}
-                      <div className="w-[125px] text-center">Billing</div>
-                      <div className="w-[105px] text-right">Actions</div>
-                    </div>
-                  </div>
-                )}
+                {viewDensity === 'compact' && renderCompactColumnHeader(false)}
 
                 {/* List of Entries for Operative */}
                 {viewDensity === 'compact' ? (
@@ -2107,6 +2118,9 @@ export function EntriesClient({
                     )}
                   </div>
                 </div>
+
+                {/* Column Header Bar in Compact Mode (Desktop) */}
+                {viewDensity === 'compact' && renderCompactColumnHeader(true)}
 
                 {/* List of Operative Entries for this Task */}
                 {viewDensity === 'compact' ? (
