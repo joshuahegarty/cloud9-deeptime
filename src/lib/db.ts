@@ -12,7 +12,7 @@ const txStorage = new AsyncLocalStorage<DbTx>();
 
 const globalForDb = globalThis as unknown as {
   __deeptimePgPromise?: Promise<PGlite>;
-  __deeptimeMigratedV19?: boolean;
+  __deeptimeMigratedV20?: boolean;
   __deeptimeMutex?: Promise<unknown>;
   __deeptimeRealtimeVersion?: number;
 };
@@ -479,23 +479,114 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
   set require_units_on_close = false, target_enabled = false
   where code in ('STD-PICK', 'STD-PACK');
 
-  -- Seed Multi-Client & Alphabetical Clients
+  -- Seed Multi-Client & Official Cloud9 Customer Roster (61 Customers + Multi-Client)
   insert into clients (id, name, code, rounding_minutes, billable_default, active) values
     ('10000000-0000-0000-0000-000000000000', 'Multi-Client / Consolidated', 'MULTI', 15, true, true),
-    ('10000000-0000-0000-0000-000000000010', 'Apex Logistics', 'APEX', 15, true, true),
-    ('10000000-0000-0000-0000-000000000011', 'British Botanicals', 'BBOT', 15, true, true),
-    ('10000000-0000-0000-0000-000000000012', 'CCELL Direct', 'CCELL', 0, true, true),
-    ('10000000-0000-0000-0000-000000000013', 'Direct Vapor Supplies', 'DVS', 15, true, true),
-    ('10000000-0000-0000-0000-000000000014', 'EcoPack Solutions', 'ECO', 15, true, true),
-    ('10000000-0000-0000-0000-000000000015', 'Green Smoke UK', 'GSMK', 0, true, true),
-    ('10000000-0000-0000-0000-000000000016', 'Highland Herbal', 'HHLD', 15, true, true),
-    ('10000000-0000-0000-0000-000000000017', 'KwikFulfil 3PL', 'KWIK', 15, true, true),
-    ('10000000-0000-0000-0000-000000000018', 'Nordic Vapour', 'NORD', 0, true, true),
-    ('10000000-0000-0000-0000-000000000019', 'Titan Distribution', 'TITN', 15, true, true),
-    ('10000000-0000-0000-0000-000000000020', 'Urban Extract Co', 'UBEX', 15, true, true),
-    ('10000000-0000-0000-0000-000000000021', 'Vanguard Packaging', 'VNG', 15, true, true),
-    ('10000000-0000-0000-0000-000000000022', 'Zenith Health Labs', 'ZNTH', 15, true, true)
-  on conflict (id) do update set active = true;
+    ('10000000-0000-0000-0000-000000000010', 'Apex Logistics', 'APEX', 15, true, false),
+    ('10000000-0000-0000-0000-000000000011', 'British Botanicals', 'BBOT', 15, true, false),
+    ('10000000-0000-0000-0000-000000000012', 'Ccell', 'CCELL', 0, true, true),
+    ('10000000-0000-0000-0000-000000000013', 'Direct Vapor Supplies', 'DVS', 15, true, false),
+    ('10000000-0000-0000-0000-000000000014', 'EcoPack Solutions', 'ECO', 15, true, false),
+    ('10000000-0000-0000-0000-000000000015', 'Green Smoke UK', 'GSMK', 0, true, false),
+    ('10000000-0000-0000-0000-000000000016', 'Highland Herbal', 'HHLD', 15, true, false),
+    ('10000000-0000-0000-0000-000000000017', 'KwikFulfil 3PL', 'KWIK', 15, true, false),
+    ('10000000-0000-0000-0000-000000000018', 'Nordic Vapour', 'NORD', 0, true, false),
+    ('10000000-0000-0000-0000-000000000019', 'Titan Distribution', 'TITN', 15, true, false),
+    ('10000000-0000-0000-0000-000000000020', 'Urban Extract Co.', 'UBEX', 15, true, false),
+    ('10000000-0000-0000-0000-000000000021', 'Vanguard Packaging', 'VNG', 15, true, false),
+    ('10000000-0000-0000-0000-000000000022', 'Zenith Health Labs', 'ZNTH', 15, true, false),
+    ('10000000-0000-0000-0000-000000000101', 'Armfit Store', 'ARMF', 15, true, true),
+    ('10000000-0000-0000-0000-000000000102', 'Coroflo', 'CORO', 15, true, true),
+    ('10000000-0000-0000-0000-000000000103', 'Avionaut', 'AVIO', 15, true, true),
+    ('10000000-0000-0000-0000-000000000104', 'Back To The Office', 'BTTO', 15, true, true),
+    ('10000000-0000-0000-0000-000000000105', 'Be Her Co.', 'BHCO', 15, true, true),
+    ('10000000-0000-0000-0000-000000000106', 'Beddoes', 'BEDD', 15, true, true),
+    ('10000000-0000-0000-0000-000000000107', 'Bentolabs', 'BENT', 15, true, true),
+    ('10000000-0000-0000-0000-000000000108', 'Bigfoot Basketball', 'BIGF', 15, true, true),
+    ('10000000-0000-0000-0000-000000000109', 'Blue Crow Media', 'BCMD', 15, true, true),
+    ('10000000-0000-0000-0000-000000000110', 'Capsicolle', 'CAPS', 15, true, true),
+    ('10000000-0000-0000-0000-000000000112', 'Cell Sync', 'CSYN', 15, true, true),
+    ('10000000-0000-0000-0000-000000000113', 'CPOMS Systems Limited', 'CPOM', 15, true, true),
+    ('10000000-0000-0000-0000-000000000114', 'Dirty Stop Outs', 'DSOU', 15, true, true),
+    ('10000000-0000-0000-0000-000000000115', 'Dope Ropes', 'DOPE', 15, true, true),
+    ('10000000-0000-0000-0000-000000000116', 'Falkland Island Spirits', 'FISP', 15, true, true),
+    ('10000000-0000-0000-0000-000000000117', 'Fight Aesthetic', 'FAES', 15, true, true),
+    ('10000000-0000-0000-0000-000000000118', 'Filamentive', 'FILA', 15, true, true),
+    ('10000000-0000-0000-0000-000000000119', 'Floship - Loop Mount', 'FLM', 15, true, true),
+    ('10000000-0000-0000-0000-000000000120', 'Floship - RN Chikadashi', 'FRNC', 15, true, true),
+    ('10000000-0000-0000-0000-000000000121', 'Folium Hair', 'FOLI', 15, true, true),
+    ('10000000-0000-0000-0000-000000000122', 'Gallop Shop', 'GALL', 15, true, true),
+    ('10000000-0000-0000-0000-000000000123', 'Genuine Terpenes', 'GTER', 15, true, true),
+    ('10000000-0000-0000-0000-000000000124', 'Gilo International', 'GILO', 15, true, true),
+    ('10000000-0000-0000-0000-000000000125', 'Goat Pets', 'GOAT', 15, true, true),
+    ('10000000-0000-0000-0000-000000000126', 'Grubby', 'GRUB', 15, true, true),
+    ('10000000-0000-0000-0000-000000000127', 'Gumnuts', 'GUMN', 15, true, true),
+    ('10000000-0000-0000-0000-000000000128', 'Gymgrl', 'GYMG', 15, true, true),
+    ('10000000-0000-0000-0000-000000000129', 'Haute Dogs', 'HAUT', 15, true, true),
+    ('10000000-0000-0000-0000-000000000130', 'Identity Merchandise', 'IDMR', 15, true, true),
+    ('10000000-0000-0000-0000-000000000131', 'Intelligent Lilli', 'ILIL', 15, true, true),
+    ('10000000-0000-0000-0000-000000000132', 'Island Wine Store', 'IWST', 15, true, true),
+    ('10000000-0000-0000-0000-000000000133', 'Jay Birmingham Hair UK', 'JBHU', 15, true, true),
+    ('10000000-0000-0000-0000-000000000134', 'Klonari', 'KLON', 15, true, true),
+    ('10000000-0000-0000-0000-000000000135', 'Lipera', 'LIPE', 15, true, true),
+    ('10000000-0000-0000-0000-000000000136', 'Lunaro Brands', 'LUNA', 15, true, true),
+    ('10000000-0000-0000-0000-000000000137', 'Luvele UK Limited', 'LUVE', 15, true, true),
+    ('10000000-0000-0000-0000-000000000138', 'Mytii', 'MYTI', 15, true, true),
+    ('10000000-0000-0000-0000-000000000139', 'Nackt Limited', 'NACK', 15, true, true),
+    ('10000000-0000-0000-0000-000000000140', 'Naybal Beauty', 'NAYB', 15, true, true),
+    ('10000000-0000-0000-0000-000000000141', 'Nightingale Hospice', 'NGHT', 15, true, true),
+    ('10000000-0000-0000-0000-000000000142', 'Noggin Braincare', 'NOGG', 15, true, true),
+    ('10000000-0000-0000-0000-000000000143', 'Norden Beauty', 'NRDB', 15, true, true),
+    ('10000000-0000-0000-0000-000000000144', 'Oak And Olivo', 'OAKO', 15, true, true),
+    ('10000000-0000-0000-0000-000000000145', 'Onesonic Audio Technologies', 'ONES', 15, true, true),
+    ('10000000-0000-0000-0000-000000000146', 'Porij', 'PORI', 15, true, true),
+    ('10000000-0000-0000-0000-000000000147', 'Sage And Paige', 'SAGE', 15, true, true),
+    ('10000000-0000-0000-0000-000000000148', 'Shane Cooper', 'SHCO', 15, true, true),
+    ('10000000-0000-0000-0000-000000000149', 'Slipdoctors', 'SLIP', 15, true, true),
+    ('10000000-0000-0000-0000-000000000150', 'Slumba London', 'SLUM', 15, true, true),
+    ('10000000-0000-0000-0000-000000000151', 'So Wood', 'SOWD', 15, true, true),
+    ('10000000-0000-0000-0000-000000000152', 'Sproushi', 'SPRO', 15, true, true),
+    ('10000000-0000-0000-0000-000000000153', 'Squelch Marketplace', 'SQCH', 15, true, true),
+    ('10000000-0000-0000-0000-000000000154', 'The Shopfloor Project', 'SHPF', 15, true, true),
+    ('10000000-0000-0000-0000-000000000155', 'Tritan BP', 'TRBP', 15, true, true),
+    ('10000000-0000-0000-0000-000000000156', 'Urban Publishing', 'URBP', 15, true, true),
+    ('10000000-0000-0000-0000-000000000157', 'Velari Brands', 'VELA', 15, true, true),
+    ('10000000-0000-0000-0000-000000000158', 'Vet Relieve', 'VETR', 15, true, true),
+    ('10000000-0000-0000-0000-000000000159', 'Vitali Life Ltd', 'VITA', 15, true, true),
+    ('10000000-0000-0000-0000-000000000160', 'We Got One Holdings', 'WGOH', 15, true, true),
+    ('10000000-0000-0000-0000-000000000161', 'XLN', 'XLN', 15, true, true),
+    ('10000000-0000-0000-0000-000000000162', 'Zilch Formula', 'ZLCH', 15, true, true)
+  on conflict (id) do update set
+    name = excluded.name,
+    code = excluded.code,
+    active = excluded.active;
+
+  -- Deactivate legacy demo placeholder clients (Peak District Nutrition & Steel City Apparel) so only official Cloud9 customers appear in active selectors
+  do $$
+  begin
+    if not exists (select 1 from settings where key = 'cloud9_customers_roster_v1') then
+      update clients
+      set active = false
+      where id in (
+        '10000000-0000-0000-0000-000000000001',
+        '10000000-0000-0000-0000-000000000002',
+        '10000000-0000-0000-0000-000000000010',
+        '10000000-0000-0000-0000-000000000011',
+        '10000000-0000-0000-0000-000000000013',
+        '10000000-0000-0000-0000-000000000014',
+        '10000000-0000-0000-0000-000000000015',
+        '10000000-0000-0000-0000-000000000016',
+        '10000000-0000-0000-0000-000000000017',
+        '10000000-0000-0000-0000-000000000018',
+        '10000000-0000-0000-0000-000000000019',
+        '10000000-0000-0000-0000-000000000020',
+        '10000000-0000-0000-0000-000000000021',
+        '10000000-0000-0000-0000-000000000022'
+      );
+      insert into settings (key, value) values ('cloud9_customers_roster_v1', 'true'::jsonb)
+      on conflict (key) do nothing;
+    end if;
+  end $$;
 
   -- Add bespoke sample tasks for Apex and CCELL Direct so switching clients shows distinct custom tasks
   insert into task_types (
@@ -884,9 +975,9 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
     (
       '70000000-0000-0000-0000-000000000002',
       '00000000-0000-0000-0000-000000000001',
-      '10000000-0000-0000-0000-000000000001',
-      '20000000-0000-0000-0000-000000000002',
-      'CONT-PDN-402',
+      '10000000-0000-0000-0000-000000000105',
+      '20000000-0000-0000-0000-000000000102',
+      'CONT-BHCO-402',
       'Inbound container bay 2',
       '00000000-0000-0000-0000-000000000004',
       'pending'
@@ -894,14 +985,17 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
     (
       '70000000-0000-0000-0000-000000000003',
       null,
-      '10000000-0000-0000-0000-000000000014',
+      '10000000-0000-0000-0000-000000000101',
       '20000000-0000-0000-0000-000000000103',
-      'URG-ECO-991',
+      'URG-ARMF-991',
       'OPEN POOL GRAB: Urgent 4-pallet courier dispatch at Bay 4 before 16:00 collection',
       '00000000-0000-0000-0000-000000000004',
       'pending'
     )
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    client_id = excluded.client_id,
+    task_type_id = excluded.task_type_id,
+    order_ref = excluded.order_ref;
 
   -- Seed initial Feature Requests & Bug Reports so the Feedback & Roadmap Board is populated out of the box
   insert into feedback_reports (
@@ -1051,16 +1145,16 @@ export async function getDb(): Promise<PGlite> {
       const pg = new PGlite(dataDir);
       await pg.waitReady;
       await applySchemaAndSeed(pg, true, true);
-      globalForDb.__deeptimeMigratedV19 = true;
+      globalForDb.__deeptimeMigratedV20 = true;
       return pg;
     })().catch((err) => {
       delete globalForDb.__deeptimePgPromise;
       throw err;
     });
-  } else if (!globalForDb.__deeptimeMigratedV19) {
+  } else if (!globalForDb.__deeptimeMigratedV20) {
     const pg = await globalForDb.__deeptimePgPromise;
     await pg.exec(UPGRADE_AND_STANDARD_TASKS_SQL);
-    globalForDb.__deeptimeMigratedV19 = true;
+    globalForDb.__deeptimeMigratedV20 = true;
   }
   return globalForDb.__deeptimePgPromise;
 }
