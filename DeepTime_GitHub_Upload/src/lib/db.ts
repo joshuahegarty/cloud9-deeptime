@@ -12,7 +12,7 @@ const txStorage = new AsyncLocalStorage<DbTx>();
 
 const globalForDb = globalThis as unknown as {
   __deeptimePgPromise?: Promise<PGlite>;
-  __deeptimeMigratedV18?: boolean;
+  __deeptimeMigratedV19?: boolean;
   __deeptimeMutex?: Promise<unknown>;
   __deeptimeRealtimeVersion?: number;
 };
@@ -107,6 +107,7 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
   );
   alter table feedback_reports add column if not exists attachments jsonb not null default '[]'::jsonb;
   alter table feedback_reports add column if not exists updates_log jsonb not null default '[]'::jsonb;
+  alter table feedback_reports add column if not exists device_type text;
 
   create or replace function check_time_entry_client_matches_task() returns trigger as $$
   declare
@@ -726,38 +727,51 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
     )
   on conflict (id) do nothing;
 
-  -- Enforce exact Cloud9 Housekeeping Tasks requested by Josh:
-  -- Remove Warehouse Floor Sweep & Replen (SCA-REPL)
-  update task_types set active = false where code = 'SCA-REPL';
+  -- Enforce exact Cloud9 Housekeeping Tasks requested by Josh on initial setup, while preserving subsequent supervisor/admin edits:
+  do $$
+  begin
+    if not exists (select 1 from settings where key = 'housekeeping_tasks_initialized') then
+      -- Remove Warehouse Floor Sweep & Replen (SCA-REPL)
+      update task_types set active = false where code = 'SCA-REPL';
 
-  -- Keep these 7 Cloud9 Housekeeping Tasks with clean names:
-  update task_types
-  set name = 'Replenishment', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 20, active = true
-  where code = 'INT-REPLEN';
+      -- Keep these 7 Cloud9 Housekeeping Tasks with clean names:
+      update task_types
+      set name = 'Replenishment', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 20, active = true
+      where code = 'INT-REPLEN';
 
-  update task_types
-  set name = 'Warehouse Sweeping & Aisle Cleaning', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 21, active = true
-  where code = 'STD-CLEAN';
+      update task_types
+      set name = 'Warehouse Sweeping & Aisle Cleaning', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 21, active = true
+      where code = 'STD-CLEAN';
 
-  update task_types
-  set name = 'Cardboard Cleanout', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 22, active = true
-  where code = 'INT-CARDBOARD';
+      update task_types
+      set name = 'Cardboard Cleanout', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 22, active = true
+      where code = 'INT-CARDBOARD';
 
-  update task_types
-  set name = 'Packing Bench & Consumables Restock', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 23, active = true
-  where code = 'INT-CONSUMABLES';
+      update task_types
+      set name = 'Packing Bench & Consumables Restock', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 23, active = true
+      where code = 'INT-CONSUMABLES';
 
-  update task_types
-  set name = 'Empty Pallet Sorting & Loading', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 24, active = true
-  where code = 'INT-PALLETS';
+      update task_types
+      set name = 'Empty Pallet Sorting & Loading', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 24, active = true
+      where code = 'INT-PALLETS';
 
-  update task_types
-  set name = 'Forklift & Safety Check', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 25, active = true
-  where code = 'INT-MHE';
+      update task_types
+      set name = 'Forklift & Safety Check', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 25, active = true
+      where code = 'INT-MHE';
 
-  update task_types
-  set name = 'Team Briefing, Shift Handover & Training', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 26, active = true
-  where code = 'INT-BRIEFING';
+      update task_types
+      set name = 'Team Briefing, Shift Handover & Training', category = 'Housekeeping', is_standard = true, client_id = null, billable = false, billing_status = 'our_cost', require_units_on_close = false, sort_order = 26, active = true
+      where code = 'INT-BRIEFING';
+
+      insert into settings (key, value) values ('housekeeping_tasks_initialized', 'true'::jsonb)
+      on conflict (key) do nothing;
+    end if;
+  end $$;
+
+  insert into settings (key, value) values ('helm_api_url', '"https://api.myhelm.app"'::jsonb)
+  on conflict (key) do nothing;
+  insert into settings (key, value) values ('helm_auto_sync', 'true'::jsonb)
+  on conflict (key) do nothing;
 
   update task_types
   set project_name = 'FSDU Retail Display Build Project', project_color = 'amber'
@@ -891,13 +905,14 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
 
   -- Seed initial Feature Requests & Bug Reports so the Feedback & Roadmap Board is populated out of the box
   insert into feedback_reports (
-    id, type, severity, title, description, page_path,
+    id, type, severity, device_type, title, description, page_path,
     reporter_user_id, reporter_name, reporter_role, status, admin_note, updates_log
   ) values
     (
       '80000000-0000-0000-0000-000000000001',
       'feature',
       'high',
+      null,
       '1-Click Manager Clock In/Out & Undo on Live Tally Counter',
       'Allow supervisors on the Floor page to clock staff in/out in 1 click, and add an Undo button on the +1/+5/+10 Live Tally counter.',
       '/floor',
@@ -912,20 +927,22 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
       '80000000-0000-0000-0000-000000000002',
       'feature',
       'high',
+      null,
       'Dispatch Cloud Helm Order Pick & Pack Integration',
       'Pull daily Order Pick and Order Pack counts automatically from Dispatch Cloud Helm so operatives never have to type order counts manually.',
       '/now',
       '00000000-0000-0000-0000-000000000005',
       'Josh',
       'admin',
-      'in_progress',
-      'Phase 1 complete: disabled manual unit prompts and targets on Order Pick & Order Pack. Phase 2: connecting Dispatch Cloud Helm API.',
-      '[{"id":"upd-2","author_name":"Josh","author_role":"admin","status":"in_progress","note":"Phase 1 complete: disabled manual unit prompts and targets on Order Pick & Order Pack. Phase 2: connecting Dispatch Cloud Helm API.","created_at":"2026-11-03T21:10:00.000Z"}]'::jsonb
+      'resolved',
+      'Shipped live — Connected Dispatch Cloud Helm API (https://api.myhelm.app /public-api/orders) with automatic Order Pick & Pack sync on task stop, 1-click Sync Helm WMS Orders, and Helm API settings in /setup/settings.',
+      '[{"id":"upd-2","author_name":"Josh","author_role":"admin","status":"in_progress","note":"Phase 1 complete: disabled manual unit prompts and targets on Order Pick & Order Pack. Phase 2: connecting Dispatch Cloud Helm API.","created_at":"2026-11-03T21:10:00.000Z"},{"id":"upd-2b","author_name":"Josh","author_role":"admin","status":"resolved","note":"Shipped live — Connected Dispatch Cloud Helm API (https://api.myhelm.app) with automatic Order Pick & Pack sync on task stop, 1-click Sync Helm WMS Orders, and Helm API configuration in Setup > Settings.","created_at":"2026-11-05T12:20:00.000Z"}]'::jsonb
     ),
     (
       '80000000-0000-0000-0000-000000000003',
       'feature',
       'medium',
+      null,
       'First-Time PIN Setup Email Invites for All Staff',
       'Send temporary PIN invites by email so staff members are prompted to choose their own 4-digit PIN the first time they sign in.',
       '/setup/users',
@@ -940,6 +957,7 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
       '80000000-0000-0000-0000-000000000004',
       'feature',
       'medium',
+      null,
       'V2 Roadmap: Spatial Floor Walking Telemetry & Warehouse Zone/Aisle Heatmaps',
       'Planned for V2: Overlay warehouse zone and aisle walking telemetry (Zones A–E, Goods-In Dock, Pick Tower Aisles, Pack Benches, FSDU Assembly, Bulk Dispatch) with live congestion & travel distance heatmaps.',
       '/floor',
@@ -949,8 +967,58 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
       'planned',
       'Deferred from V1 to keep the V1 Floor view clean and focused; scheduled in the V2 Roadmap.',
       '[{"id":"upd-4","author_name":"Josh","author_role":"admin","status":"planned","note":"Deferred from V1 to keep the V1 Floor view clean and focused; scheduled in the V2 Roadmap.","created_at":"2026-11-03T23:21:00.000Z"}]'::jsonb
+    ),
+    (
+      '2bd2f1b5-36b9-4bab-8da8-3fc5b8344c32',
+      'feature',
+      'medium',
+      'desktop',
+      'Under F8, Screenshot uploading feature needs to allow a simple pasting otpion for screenshots - at the moment, it requires me to ''save'' on my Desktop.',
+      'This currently adds a lot of time and admin work to the bug and improvement reporting process.',
+      '/now',
+      '00000000-0000-0000-0000-000000000017',
+      'Ashton',
+      'operative',
+      'resolved',
+      'Shipped live — Added global Ctrl+V / Cmd+V screenshot paste anywhere while F8 is open, a 1-click "📋 Paste Screenshot from Clipboard" button, and drag-and-drop image support so screenshots never need to be saved to Desktop first.',
+      '[{"id":"upd-ashton-1","author_name":"Josh","author_role":"admin","status":"resolved","note":"Shipped live — Added global Ctrl+V / Cmd+V screenshot paste anywhere while F8 is open, a 1-click Paste Screenshot from Clipboard button, and drag-and-drop image support.","created_at":"2026-11-05T12:20:00.000Z"}]'::jsonb
+    ),
+    (
+      '4fe7b68e-1eac-4ba6-8ae9-575e78161f19',
+      'feature',
+      'medium',
+      null,
+      'Create options for ''Desktop'' ''Android Mobile'', ''iPhone'' and ''Scanner  to categorise bug and improvement reports.',
+      'This will help the developer to know what device the UI issue is on. If it is a functional issue accross all devices, than no option is required to be selected.',
+      '/now',
+      '00000000-0000-0000-0000-000000000017',
+      'Ashton',
+      'operative',
+      'resolved',
+      'Shipped live — Added optional device category pills (Desktop, Android Mobile, iPhone, Scanner — or leave unselected for all devices) in F8 and on the /feedback Roadmap Board with device badges and filters.',
+      '[{"id":"upd-ashton-2","author_name":"Josh","author_role":"admin","status":"resolved","note":"Shipped live — Added optional device category pills (Desktop, Android Mobile, iPhone, Scanner — or leave unselected for all devices) in F8 and on the /feedback Roadmap Board.","created_at":"2026-11-05T12:20:00.000Z"}]'::jsonb
+    ),
+    (
+      '414da08d-ee1a-4027-a277-8b343b046df5',
+      'bug',
+      'medium',
+      null,
+      'At the moment it''s not working to be able to edit housekeeping tasks I need to add an edit and an ad button',
+      'Add +',
+      '/now',
+      '00000000-0000-0000-0000-000000000004',
+      'Mark',
+      'supervisor',
+      'resolved',
+      'Shipped live — Added the Edit (pencil) button on every Cloud9 Housekeeping task card, the + button in the 2D section header, and the "Add Housekeeping Task +" card at the bottom of Step 2D.',
+      '[{"id":"upd-mark-1","author_name":"Josh","author_role":"admin","status":"resolved","note":"Shipped live — Added the Edit (pencil) button on every Cloud9 Housekeeping task card, the + button in the 2D header bar, and the Add Housekeeping Task + card in Step 2D.","created_at":"2026-11-05T12:20:00.000Z"}]'::jsonb
     )
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    status = excluded.status,
+    admin_note = excluded.admin_note,
+    device_type = coalesce(feedback_reports.device_type, excluded.device_type),
+    updates_log = excluded.updates_log,
+    updated_at = now();
 `;
 
 async function applySchemaAndSeed(pg: PGlite, includeSeed = true, includeStandardTasks = true) {
@@ -983,16 +1051,16 @@ export async function getDb(): Promise<PGlite> {
       const pg = new PGlite(dataDir);
       await pg.waitReady;
       await applySchemaAndSeed(pg, true, true);
-      globalForDb.__deeptimeMigratedV18 = true;
+      globalForDb.__deeptimeMigratedV19 = true;
       return pg;
     })().catch((err) => {
       delete globalForDb.__deeptimePgPromise;
       throw err;
     });
-  } else if (!globalForDb.__deeptimeMigratedV18) {
+  } else if (!globalForDb.__deeptimeMigratedV19) {
     const pg = await globalForDb.__deeptimePgPromise;
     await pg.exec(UPGRADE_AND_STANDARD_TASKS_SQL);
-    globalForDb.__deeptimeMigratedV18 = true;
+    globalForDb.__deeptimeMigratedV19 = true;
   }
   return globalForDb.__deeptimePgPromise;
 }

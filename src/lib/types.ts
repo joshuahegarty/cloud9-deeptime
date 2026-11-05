@@ -158,6 +158,9 @@ export interface AppSettings {
   summary_recipients: string[];
   timezone: string;
   show_targets_to_operatives?: boolean;
+  helm_api_url?: string;
+  helm_api_token?: string;
+  helm_auto_sync?: boolean;
 }
 
 export interface SavedView {
@@ -261,6 +264,7 @@ export interface TaskTargetAnalysis {
 export type FeedbackType = 'bug' | 'feature';
 export type FeedbackSeverity = 'low' | 'medium' | 'high' | 'critical';
 export type FeedbackStatus = 'open' | 'planned' | 'in_progress' | 'resolved' | 'closed';
+export type FeedbackDeviceType = 'desktop' | 'android' | 'iphone' | 'scanner';
 
 export interface FeedbackUpdateItem {
   id: string;
@@ -275,6 +279,7 @@ export interface FeedbackReport {
   id: string;
   type: FeedbackType;
   severity: FeedbackSeverity;
+  device_type?: FeedbackDeviceType | null;
   title: string;
   description: string;
   page_path: string;

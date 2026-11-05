@@ -7,6 +7,7 @@ import {
 } from '@/app/actions';
 import { appendTranscript, VoiceMicButton } from '@/components/VoiceMicButton';
 import {
+  FeedbackDeviceType,
   FeedbackReport,
   FeedbackSeverity,
   FeedbackStatus,
@@ -18,13 +19,17 @@ import {
   Bug,
   Camera,
   CheckCircle2,
+  ClipboardPaste,
   Clock,
   ExternalLink,
   ImagePlus,
   Lightbulb,
   ListFilter,
   MessageSquarePlus,
+  Monitor,
+  ScanBarcode,
   Send,
+  Smartphone,
   Sparkles,
   Trash2,
   X,
@@ -77,6 +82,33 @@ export async function compressImageFileToDataUrl(file: File): Promise<string> {
   });
 }
 
+export const FEEDBACK_DEVICE_OPTIONS: Array<{
+  value: FeedbackDeviceType;
+  label: string;
+  badgeClass: string;
+}> = [
+  {
+    value: 'desktop',
+    label: 'Desktop',
+    badgeClass: 'bg-indigo-500/20 text-indigo-200 border-indigo-500/40',
+  },
+  {
+    value: 'android',
+    label: 'Android Mobile',
+    badgeClass: 'bg-teal-500/20 text-teal-200 border-teal-500/40',
+  },
+  {
+    value: 'iphone',
+    label: 'iPhone',
+    badgeClass: 'bg-cyan-500/20 text-cyan-200 border-cyan-500/40',
+  },
+  {
+    value: 'scanner',
+    label: 'Scanner',
+    badgeClass: 'bg-amber-500/20 text-amber-200 border-amber-500/40',
+  },
+];
+
 export const FEEDBACK_STATUS_META: Record<
   FeedbackStatus,
   { label: string; badgeClass: string; dotClass: string }
@@ -117,9 +149,12 @@ export function FeedbackModal({
   const [activeTab, setActiveTab] = useState<'submit' | 'list'>('submit');
   const [type, setType] = useState<FeedbackType>('bug');
   const [severity, setSeverity] = useState<FeedbackSeverity>('medium');
+  const [deviceType, setDeviceType] = useState<FeedbackDeviceType | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [attachments, setAttachments] = useState<string[]>([]);
+  const [pasteNotice, setPasteNotice] = useState<string | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [pagePath, setPagePath] = useState(currentPath || '/');
   const [reporterName, setReporterName] = useState(user?.display_name || '');
   const [submitting, setSubmitting] = useState(false);
@@ -165,9 +200,7 @@ export function FeedbackModal({
     }
   }, [isOpen, currentPath, user, loadReports]);
 
-  if (!isOpen) return null;
-
-  const handleFilesSelected = async (files: FileList | File[] | null) => {
+  const handleFilesSelected = useCallback(async (files: FileList | File[] | null) => {
     if (!files) return;
     const list = Array.from(files).filter((f) => f.type.startsWith('image/'));
     if (list.length === 0) return;
@@ -181,7 +214,62 @@ export function FeedbackModal({
         // ignore failed file
       }
     }
-    setAttachments((prev) => [...prev, ...encoded].slice(0, 6));
+    if (encoded.length > 0) {
+      setAttachments((prev) => [...prev, ...encoded].slice(0, 6));
+      setPasteNotice(`✓ Attached ${encoded.length} screenshot${encoded.length > 1 ? 's' : ''}`);
+      setTimeout(() => setPasteNotice(null), 3500);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onGlobalPaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const imageFiles: File[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) imageFiles.push(file);
+        }
+      }
+      if (imageFiles.length > 0) {
+        e.preventDefault();
+        setActiveTab('submit');
+        await handleFilesSelected(imageFiles);
+      }
+    };
+    window.addEventListener('paste', onGlobalPaste);
+    return () => window.removeEventListener('paste', onGlobalPaste);
+  }, [isOpen, handleFilesSelected]);
+
+  if (!isOpen) return null;
+
+  const handlePasteFromClipboardButton = async () => {
+    setError(null);
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.read) {
+        setPasteNotice('Press Ctrl+V (or Cmd+V) anywhere right now to paste your screenshot!');
+        return;
+      }
+      const clipboardItems = await navigator.clipboard.read();
+      const files: File[] = [];
+      for (const item of clipboardItems) {
+        const imgType = item.types.find((t) => t.startsWith('image/'));
+        if (imgType) {
+          const blob = await item.getType(imgType);
+          files.push(new File([blob], `clipboard-screenshot-${Date.now()}.png`, { type: imgType }));
+        }
+      }
+      if (files.length === 0) {
+        setPasteNotice('No screenshot image found in clipboard. Take a screenshot (Win+Shift+S or PrtScn) then click Paste or press Ctrl+V.');
+        return;
+      }
+      await handleFilesSelected(files);
+    } catch {
+      setPasteNotice('Press Ctrl+V (or Cmd+V) anywhere in this window to paste your screenshot directly!');
+    }
   };
 
   const handlePasteClipboard = async (e: React.ClipboardEvent) => {
@@ -196,6 +284,7 @@ export function FeedbackModal({
       }
     }
     if (imageFiles.length > 0) {
+      e.preventDefault();
       await handleFilesSelected(imageFiles);
     }
   };
@@ -210,6 +299,7 @@ export function FeedbackModal({
       const res = await submitFeedbackReportAction({
         type,
         severity,
+        deviceType,
         title,
         description,
         pagePath,
@@ -222,6 +312,7 @@ export function FeedbackModal({
       } else {
         setTitle('');
         setDescription('');
+        setDeviceType(null);
         setAttachments([]);
         setSuccessMsg(
           type === 'bug'
@@ -457,6 +548,52 @@ export function FeedbackModal({
                 </div>
               </div>
 
+              {/* Optional Device Category Selector (Desktop / Android Mobile / iPhone / Scanner) */}
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-1 mb-1.5">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Device Category <span className="text-slate-500 font-normal normal-case">(Optional — leave unselected if across all devices)</span>
+                  </label>
+                  {deviceType && (
+                    <button
+                      type="button"
+                      onClick={() => setDeviceType(null)}
+                      className="text-[11px] font-bold text-slate-400 hover:text-white underline"
+                    >
+                      Clear device (All Devices)
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {FEEDBACK_DEVICE_OPTIONS.map((dev) => {
+                    const isSelected = deviceType === dev.value;
+                    return (
+                      <button
+                        key={dev.value}
+                        type="button"
+                        onClick={() =>
+                          setDeviceType((prev) => (prev === dev.value ? null : dev.value))
+                        }
+                        className={`py-2 px-3 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                          isSelected
+                            ? dev.badgeClass
+                            : 'bg-slate-800/40 border-slate-700/70 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {dev.value === 'desktop' ? (
+                          <Monitor className="w-3.5 h-3.5 shrink-0" />
+                        ) : dev.value === 'scanner' ? (
+                          <ScanBarcode className="w-3.5 h-3.5 shrink-0" />
+                        ) : (
+                          <Smartphone className="w-3.5 h-3.5 shrink-0" />
+                        )}
+                        <span>{dev.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Summary / Title */}
               <div>
                 <div className="flex items-center justify-between gap-2 mb-1">
@@ -529,14 +666,32 @@ export function FeedbackModal({
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
                 />
 
-                {/* Photo & Screenshot Upload Strip */}
-                <div className="mt-2.5 p-3 rounded-xl bg-slate-950/90 border border-dashed border-slate-700 space-y-2.5">
+                {/* Photo & Screenshot Upload Strip (Supports Instant Clipboard Paste, 1-Click Paste Button & Drag-and-Drop) */}
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDraggingOver(true);
+                  }}
+                  onDragLeave={() => setIsDraggingOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDraggingOver(false);
+                    if (e.dataTransfer?.files?.length) {
+                      handleFilesSelected(e.dataTransfer.files);
+                    }
+                  }}
+                  className={`mt-2.5 p-3 rounded-xl border border-dashed space-y-2.5 transition ${
+                    isDraggingOver
+                      ? 'bg-emerald-950/40 border-emerald-400'
+                      : 'bg-slate-950/90 border-slate-700'
+                  }`}
+                >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2 text-xs text-slate-300">
                       <Camera className="w-4 h-4 text-emerald-400 shrink-0" />
                       <span className="font-bold">Photos &amp; Screenshots ({attachments.length}/6)</span>
-                      <span className="text-[11px] text-slate-500 hidden sm:inline">
-                        — Upload photos from your phone/PC or paste with Ctrl+V
+                      <span className="text-[11px] text-slate-400 hidden sm:inline">
+                        — Press <kbd className="px-1 py-0.5 rounded bg-slate-800 text-emerald-300 font-mono text-[10px]">Ctrl+V</kbd> anywhere or click Paste Screenshot (no need to save to Desktop!)
                       </span>
                     </div>
                     <input
@@ -550,16 +705,34 @@ export function FeedbackModal({
                       }}
                       className="hidden"
                     />
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={attachments.length >= 6}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 disabled:opacity-40 text-emerald-300 border border-emerald-500/40 text-xs font-black inline-flex items-center gap-1.5 transition"
-                    >
-                      <ImagePlus className="w-3.5 h-3.5" />
-                      + Attach Photo / Screenshot
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handlePasteFromClipboardButton}
+                        disabled={attachments.length >= 6}
+                        className="px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 disabled:opacity-40 text-sky-200 border border-sky-500/40 text-xs font-black inline-flex items-center gap-1.5 transition"
+                        title="Paste screenshot directly from your clipboard without saving a file"
+                      >
+                        <ClipboardPaste className="w-3.5 h-3.5" />
+                        📋 Paste Screenshot (Ctrl+V)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={attachments.length >= 6}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 disabled:opacity-40 text-emerald-300 border border-emerald-500/40 text-xs font-black inline-flex items-center gap-1.5 transition"
+                      >
+                        <ImagePlus className="w-3.5 h-3.5" />
+                        + Upload File
+                      </button>
+                    </div>
                   </div>
+
+                  {pasteNotice && (
+                    <div className="text-xs font-bold text-emerald-300 bg-emerald-950/60 border border-emerald-500/30 rounded-lg px-2.5 py-1.5">
+                      {pasteNotice}
+                    </div>
+                  )}
 
                   {attachments.length > 0 && (
                     <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-1">
@@ -776,6 +949,18 @@ export function FeedbackModal({
                             <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 font-mono text-[11px] text-slate-400">
                               {item.page_path}
                             </span>
+
+                            {item.device_type && (
+                              <span
+                                className={`px-2 py-0.5 rounded-md border text-[10px] font-black uppercase ${
+                                  FEEDBACK_DEVICE_OPTIONS.find((d) => d.value === item.device_type)
+                                    ?.badgeClass || 'bg-slate-800 text-slate-300 border-slate-700'
+                                }`}
+                              >
+                                {FEEDBACK_DEVICE_OPTIONS.find((d) => d.value === item.device_type)
+                                  ?.label || item.device_type}
+                              </span>
+                            )}
                           </div>
 
                           {/* Status Badge or Staff Selector */}

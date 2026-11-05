@@ -2,11 +2,17 @@
 
 import { SESSION_COOKIE_NAME, getCurrentUser, requireRole } from '@/lib/auth';
 import { bumpRealtimeVersion, withDbSession } from '@/lib/db';
+import {
+  fetchHelmOrderCountForWindow,
+  getHelmConfigFromDb,
+  testHelmConnection,
+} from '@/lib/helmApi';
 import { buildAndSendDailySummary } from '@/lib/summary-email';
 import { getSupabaseAdminClient } from '@/lib/supabase';
 import {
   AppSettings,
   EntrySource,
+  FeedbackDeviceType,
   FeedbackReport,
   FeedbackSeverity,
   FeedbackStatus,
@@ -552,10 +558,18 @@ export async function assignTaskToOperativeAction(params: {
 
 export async function syncHelmWmsOrdersAction(params?: {
   dateStr?: string;
-}): Promise<{ ok: boolean; syncedCount?: number; totalOrdersSynced?: number; error?: string }> {
+}): Promise<{
+  ok: boolean;
+  syncedCount?: number;
+  totalOrdersSynced?: number;
+  source?: string;
+  endpointUsed?: string;
+  error?: string;
+}> {
   try {
     const actor = await requireRole(['supervisor', 'admin']);
     const res = await withDbSession(actor.id, async (tx) => {
+      const helmConfig = await getHelmConfigFromDb(tx);
       const targetDateSql = params?.dateStr
         ? `and (e.started_at at time zone 'Europe/London')::date = $1::date`
         : `and (e.started_at at time zone 'Europe/London')::date = (now() at time zone 'Europe/London')::date`;
@@ -567,11 +581,14 @@ export async function syncHelmWmsOrdersAction(params?: {
         ended_at: string;
         units: number | null;
         note: string | null;
+        order_ref: string | null;
         code: string;
+        client_code: string | null;
       }>(
-        `select e.id, e.started_at::text, e.ended_at::text, e.units, e.note, t.code
+        `select e.id, e.started_at::text, e.ended_at::text, e.units, e.note, e.order_ref, t.code, c.code as client_code
          from time_entries e
          join task_types t on t.id = e.task_type_id
+         left join clients c on c.id = e.client_id
          where e.ended_at is not null
            and (t.code in ('STD-PICK', 'STD-PACK', 'PDN-PICK', 'SCA-PICK') or t.category = 'Pick & Pack')
            ${targetDateSql}`,
@@ -580,22 +597,28 @@ export async function syncHelmWmsOrdersAction(params?: {
 
       let syncedCount = 0;
       let totalOrdersSynced = 0;
+      let lastSource = 'helm_verified_batch';
+      let lastEndpoint = helmConfig.baseUrl;
 
       for (const row of entriesRes.rows) {
-        const durMins = Math.max(
-          1,
-          (new Date(row.ended_at).getTime() - new Date(row.started_at).getTime()) / 60000
-        );
-        const helmVerifiedOrders =
-          row.units && row.units > 0
-            ? row.units
-            : Math.max(1, Math.round(durMins / 1.4));
-        const syncTag = `[Helm WMS Sync: ${helmVerifiedOrders} orders verified]`;
-        const nextNote = row.note?.includes('[Helm WMS Sync')
-          ? row.note
-          : row.note
-          ? `${row.note} · ${syncTag}`
-          : syncTag;
+        const helmSummary = await fetchHelmOrderCountForWindow({
+          config: helmConfig,
+          taskCode: row.code,
+          clientCode: row.client_code,
+          orderRef: row.order_ref,
+          startedAt: row.started_at,
+          endedAt: row.ended_at,
+          existingUnits: row.units,
+        });
+
+        lastSource = helmSummary.source;
+        lastEndpoint = helmSummary.endpointUsed;
+        const helmVerifiedOrders = helmSummary.orderCount;
+        const syncTag = `[Helm API (${helmSummary.source === 'helm_live_api' ? 'live myhelm.app' : 'myhelm.app sync'}): ${helmVerifiedOrders} orders]`;
+        const cleanedPrevNote = (row.note || '')
+          .replace(/\s*·?\s*\[Helm (?:WMS Sync|API)[^\]]*\]/g, '')
+          .trim();
+        const nextNote = cleanedPrevNote ? `${cleanedPrevNote} · ${syncTag}` : syncTag;
 
         await tx.query(
           `update time_entries
@@ -608,7 +631,12 @@ export async function syncHelmWmsOrdersAction(params?: {
         totalOrdersSynced += helmVerifiedOrders;
       }
 
-      return { syncedCount, totalOrdersSynced };
+      return {
+        syncedCount,
+        totalOrdersSynced,
+        source: lastSource,
+        endpointUsed: lastEndpoint,
+      };
     });
 
     bumpRealtimeVersion();
@@ -617,6 +645,17 @@ export async function syncHelmWmsOrdersAction(params?: {
   } catch (err: any) {
     return { ok: false, error: err?.message || 'Failed to sync Helm WMS orders.' };
   }
+}
+
+export async function testHelmWmsConnectionAction(params: {
+  helmApiUrl: string;
+  helmApiToken: string;
+}) {
+  await requireRole(['supervisor', 'admin']);
+  return testHelmConnection({
+    baseUrl: params.helmApiUrl,
+    apiToken: params.helmApiToken,
+  });
 }
 
 export async function dismissAssignedTaskAction(params: {
@@ -832,8 +871,24 @@ export async function stopTaskAction(params: {
       }
 
       // Check if still running (conflict resolution: if already stopped on server, server state wins)
-      const currentRes = await tx.query<{ id: string; ended_at: string | null; units: number | null; note: string | null }>(
-        `select id, ended_at::text, units, note from time_entries where id = $1 limit 1`,
+      const currentRes = await tx.query<{
+        id: string;
+        started_at: string;
+        ended_at: string | null;
+        units: number | null;
+        note: string | null;
+        order_ref: string | null;
+        task_type_id: string;
+        task_code: string;
+        task_category: string | null;
+        client_code: string | null;
+      }>(
+        `select e.id, e.started_at::text, e.ended_at::text, e.units, e.note, e.order_ref,
+                e.task_type_id, t.code as task_code, t.category as task_category, c.code as client_code
+         from time_entries e
+         join task_types t on t.id = e.task_type_id
+         left join clients c on c.id = e.client_id
+         where e.id = $1 limit 1`,
         [targetEntryId]
       );
       const current = currentRes.rows[0];
@@ -861,13 +916,38 @@ export async function stopTaskAction(params: {
         return;
       }
 
-      const finalUnits = params.units !== undefined ? params.units : current.units;
+      let finalUnits = params.units !== undefined ? params.units : current.units;
       const incomingNote = params.note?.trim() || null;
-      const combinedNote = incomingNote
+      let combinedNote = incomingNote
         ? current.note?.trim()
           ? `${current.note.trim()} · ${incomingNote}`
           : incomingNote
         : current.note;
+
+      // Automatic Dispatch Cloud Helm Order Pick & Pack Sync on task completion
+      const isHelmOrderTask =
+        current.task_code === 'STD-PICK' ||
+        current.task_code === 'STD-PACK' ||
+        current.task_code === 'PDN-PICK' ||
+        current.task_code === 'SCA-PICK';
+
+      if (isHelmOrderTask && (finalUnits === null || finalUnits === undefined || finalUnits === 0)) {
+        const helmConfig = await getHelmConfigFromDb(tx);
+        if (helmConfig.autoSync) {
+          const helmSummary = await fetchHelmOrderCountForWindow({
+            config: helmConfig,
+            taskCode: current.task_code,
+            clientCode: current.client_code,
+            orderRef: current.order_ref,
+            startedAt: current.started_at,
+            endedAt: effectiveEnd,
+            existingUnits: finalUnits,
+          });
+          finalUnits = helmSummary.orderCount;
+          const syncTag = `[Helm API (${helmSummary.source === 'helm_live_api' ? 'live myhelm.app' : 'myhelm.app sync'}): ${helmSummary.orderCount} orders]`;
+          combinedNote = combinedNote ? `${combinedNote} · ${syncTag}` : syncTag;
+        }
+      }
 
       await tx.query(
         `update time_entries
@@ -2418,6 +2498,18 @@ export async function updateSettingsAction(
       if (settings.show_targets_to_operatives !== undefined) {
         entries.push(['show_targets_to_operatives', Boolean(settings.show_targets_to_operatives)]);
       }
+      if (settings.helm_api_url !== undefined) {
+        entries.push([
+          'helm_api_url',
+          settings.helm_api_url.trim() || 'https://api.myhelm.app',
+        ]);
+      }
+      if (settings.helm_api_token !== undefined) {
+        entries.push(['helm_api_token', settings.helm_api_token.trim()]);
+      }
+      if (settings.helm_auto_sync !== undefined) {
+        entries.push(['helm_auto_sync', Boolean(settings.helm_auto_sync)]);
+      }
 
       for (const [k, v] of entries) {
         await tx.query(
@@ -2855,6 +2947,7 @@ export async function reviewTargetChangeAction(params: {
 export async function submitFeedbackReportAction(params: {
   type: FeedbackType;
   severity: FeedbackSeverity;
+  deviceType?: FeedbackDeviceType | null;
   title: string;
   description: string;
   pagePath: string;
@@ -2882,6 +2975,11 @@ export async function submitFeedbackReportAction(params: {
     const severity: FeedbackSeverity = validSeverities.includes(params.severity)
       ? params.severity
       : 'medium';
+    const validDevices: FeedbackDeviceType[] = ['desktop', 'android', 'iphone', 'scanner'];
+    const deviceType: FeedbackDeviceType | null =
+      params.deviceType && validDevices.includes(params.deviceType)
+        ? params.deviceType
+        : null;
     const pagePath = params.pagePath?.trim() || '/';
     const safeAttachments = Array.isArray(params.attachments)
       ? params.attachments
@@ -2892,18 +2990,19 @@ export async function submitFeedbackReportAction(params: {
     const report = await withDbSession(sessionUser?.id ?? null, async (tx) => {
       const insertRes = await tx.query<FeedbackReport>(
         `insert into feedback_reports (
-           type, severity, title, description, page_path,
+           type, severity, device_type, title, description, page_path,
            reporter_user_id, reporter_name, reporter_role, status,
            attachments, updates_log
          )
-         values ($1, $2, $3, $4, $5, $6, $7, $8, 'open', $9::jsonb, '[]'::jsonb)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', $10::jsonb, '[]'::jsonb)
          returning
-           id, type, severity, title, description, page_path,
+           id, type, severity, device_type, title, description, page_path,
            reporter_user_id, reporter_name, reporter_role, status,
            admin_note, attachments, updates_log, created_at::text, updated_at::text`,
         [
           type,
           severity,
+          deviceType,
           title,
           description,
           pagePath,
@@ -2934,7 +3033,7 @@ export async function getFeedbackReportsAction(): Promise<{
     const reports = await withDbSession(sessionUser?.id ?? null, async (tx) => {
       const res = await tx.query<FeedbackReport>(
         `select
-           id, type, severity, title, description, page_path,
+           id, type, severity, device_type, title, description, page_path,
            reporter_user_id, reporter_name, reporter_role, status,
            admin_note,
            coalesce(attachments, '[]'::jsonb) as attachments,

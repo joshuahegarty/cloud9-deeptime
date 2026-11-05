@@ -3653,29 +3653,41 @@ export function NowClient({
                                           Tracks {task.unit_label}
                                         </div>
                                       )}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        executeStartTask(task, 'picked', targetClient)
-                                      }
-                                      className="play-btn w-10 h-10 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center shrink-0 shadow"
-                                      title="Start project sub-task"
-                                    >
-                                      <Play className="w-4 h-4 fill-current" />
-                                    </button>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
+                                      </button>
+                                      <div className="flex items-center gap-1.5 shrink-0">
+                                        {isManagerOrAdmin && (
+                                          <button
+                                            type="button"
+                                            onClick={() => setTaskEditModal(task)}
+                                            className="p-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 transition"
+                                            title="Edit project task"
+                                          >
+                                            <Pencil className="w-4 h-4" />
+                                          </button>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            executeStartTask(task, 'picked', targetClient)
+                                          }
+                                          className="play-btn w-10 h-10 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center shrink-0 shadow"
+                                          title="Start project sub-task"
+                                        >
+                                          <Play className="w-4 h-4 fill-current" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
           </section>
 
           {/* 4. COLLAPSIBLE BAR: 2D · CLOUD9 HOUSEKEEPING TASKS */}
@@ -3711,6 +3723,36 @@ export function NowClient({
                   {housekeepingTasks.length}{' '}
                   {housekeepingTasks.length === 1 ? 'task' : 'tasks'}
                 </span>
+                {isManagerOrAdmin && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setTargetNotApplicable(true);
+                      setTaskEditModal({
+                        client_id: null,
+                        is_standard: true,
+                        category: 'Housekeeping',
+                        name: '',
+                        code: `INT-HK-${housekeepingTasks.length + 1}`,
+                        standard_minutes: null,
+                        target_enabled: false,
+                        unit_label: 'cycles',
+                        require_units_on_close: false,
+                        billable: false,
+                        billing_status: 'our_cost',
+                        rate: 0,
+                        barcode: '',
+                        sort_order: 20 + housekeepingTasks.length + 1,
+                        active: true,
+                      });
+                    }}
+                    title="Add housekeeping task"
+                    className="w-7 h-7 rounded-lg bg-rose-500/20 hover:bg-rose-400 text-rose-200 hover:text-slate-950 border border-rose-400/50 flex items-center justify-center transition shadow-sm"
+                  >
+                    <Plus className="w-4 h-4 stroke-[3]" />
+                  </button>
+                )}
                 <span className="px-2.5 py-1 rounded-xl bg-slate-900/90 border border-rose-500/30 text-xs font-bold text-rose-300 flex items-center gap-1">
                   <span>
                     {expandedTaskSections.housekeeping ? 'Collapse' : 'Expand'}
@@ -3752,19 +3794,82 @@ export function NowClient({
                           {task.name}
                         </div>
                         <div className="text-[11px] text-slate-400 mt-0.5">
-                          Non-billable internal warehouse activity
+                          Non-billable internal warehouse activity ({task.code})
                         </div>
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => executeStartTask(task, 'picked', targetClient)}
-                        className="play-btn w-11 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center shrink-0 shadow"
-                      >
-                        <Play className="w-5 h-5 fill-current" />
-                      </button>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {isManagerOrAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTargetNotApplicable(
+                                task.standard_minutes === null ||
+                                  task.standard_minutes === undefined ||
+                                  task.target_enabled === false
+                              );
+                              setTaskEditModal(task);
+                            }}
+                            className="p-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 transition"
+                            title="Edit housekeeping task"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => executeStartTask(task, 'picked', targetClient)}
+                          className="play-btn w-11 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center shrink-0 shadow"
+                          title="Start housekeeping task"
+                        >
+                          <Play className="w-5 h-5 fill-current" />
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
+
+                {isManagerOrAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetNotApplicable(true);
+                      setTaskEditModal({
+                        client_id: null,
+                        is_standard: true,
+                        category: 'Housekeeping',
+                        name: '',
+                        code: `INT-HK-${housekeepingTasks.length + 1}`,
+                        standard_minutes: null,
+                        target_enabled: false,
+                        unit_label: 'cycles',
+                        require_units_on_close: false,
+                        billable: false,
+                        billing_status: 'our_cost',
+                        rate: 0,
+                        barcode: '',
+                        sort_order: 20 + housekeepingTasks.length + 1,
+                        active: true,
+                      });
+                    }}
+                    className="p-4 rounded-2xl bg-slate-900/50 hover:bg-rose-950/25 border-2 border-dashed border-rose-500/40 hover:border-rose-400 card-interactive flex items-center justify-between gap-3 transition text-left min-h-[88px]"
+                  >
+                    <div>
+                      <div className="inline-block px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 font-mono text-[10px] font-bold">
+                        CLOUD9 HOUSEKEEPING
+                      </div>
+                      <div className="text-[15px] font-semibold text-white mt-1.5 leading-snug">
+                        Add Housekeeping Task +
+                      </div>
+                      <div className="text-[11px] font-normal text-slate-400 mt-0.5">
+                        Create a new internal warehouse housekeeping activity
+                      </div>
+                    </div>
+                    <div className="w-11 h-11 rounded-xl bg-rose-500 text-slate-950 flex items-center justify-center shrink-0 shadow">
+                      <Plus className="w-5 h-5 stroke-[3]" />
+                    </div>
+                  </button>
+                )}
               </div>
             )}
           </section>

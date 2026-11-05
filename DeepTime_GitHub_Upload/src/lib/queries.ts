@@ -30,6 +30,16 @@ export async function getSettings(actorUserId: string | null = null): Promise<Ap
       show_targets_to_operatives:
         map.show_targets_to_operatives === true ||
         map.show_targets_to_operatives === 'true',
+      helm_api_url: String(
+        map.helm_api_url || process.env.HELM_API_URL || 'https://api.myhelm.app'
+      ).replace(/^"|"$/g, ''),
+      helm_api_token: String(
+        map.helm_api_token || process.env.HELM_API_TOKEN || ''
+      ).replace(/^"|"$/g, ''),
+      helm_auto_sync:
+        map.helm_auto_sync === undefined
+          ? true
+          : map.helm_auto_sync === true || map.helm_auto_sync === 'true',
     };
   });
 }

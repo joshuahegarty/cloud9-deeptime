@@ -3,6 +3,8 @@
 import {
   sendBulkTemporaryPinInvitesAction,
   sendTemporaryPinInviteAction,
+  syncHelmWmsOrdersAction,
+  testHelmWmsConnectionAction,
   toggleTaskTargetAction,
   toggleUserHandsFreeVoiceAction,
   updateSettingsAction,
@@ -140,6 +142,14 @@ export function SetupClient({
   const [showTargetsToOperatives, setShowTargetsToOperatives] = useState<boolean>(
     settings.show_targets_to_operatives ?? false
   );
+  const [helmApiUrl, setHelmApiUrl] = useState(
+    settings.helm_api_url || 'https://api.myhelm.app'
+  );
+  const [helmApiToken, setHelmApiToken] = useState(settings.helm_api_token || '');
+  const [helmAutoSync, setHelmAutoSync] = useState<boolean>(
+    settings.helm_auto_sync ?? true
+  );
+  const [helmStatusMsg, setHelmStatusMsg] = useState<string | null>(null);
 
   const handleToggleTaskTarget = async (task: TaskType) => {
     setBusy(true);
@@ -364,14 +374,42 @@ export function SetupClient({
       summary_recipients: recipients,
       timezone,
       show_targets_to_operatives: showTargetsToOperatives,
+      helm_api_url: helmApiUrl.trim() || 'https://api.myhelm.app',
+      helm_api_token: helmApiToken.trim(),
+      helm_auto_sync: helmAutoSync,
     });
     setBusy(false);
 
     if (res.ok) {
-      setBanner('Settings updated.');
+      setBanner('Settings updated (including Dispatch Cloud Helm API configuration).');
       router.refresh();
     } else {
       setBanner(res.error || 'Failed to save settings');
+    }
+  };
+
+  const handleTestHelmConnection = async () => {
+    setBusy(true);
+    setHelmStatusMsg(null);
+    const res = await testHelmWmsConnectionAction({
+      helmApiUrl,
+      helmApiToken,
+    });
+    setBusy(false);
+    setHelmStatusMsg(res.message);
+  };
+
+  const handleSyncHelmNow = async () => {
+    setBusy(true);
+    const res = await syncHelmWmsOrdersAction();
+    setBusy(false);
+    if (res.ok) {
+      const msg = `Synced ${res.syncedCount ?? 0} Pick & Pack task runs (${res.totalOrdersSynced ?? 0} total orders verified via ${res.endpointUsed || 'https://api.myhelm.app'}).`;
+      setHelmStatusMsg(msg);
+      setBanner(msg);
+      router.refresh();
+    } else {
+      setHelmStatusMsg(res.error || 'Failed to sync Helm WMS orders.');
     }
   };
 
@@ -1097,6 +1135,95 @@ export function SetupClient({
                   </div>
                 </div>
               </label>
+            </div>
+
+            {/* Dispatch Cloud Helm (https://api.myhelm.app/) Order Pick & Pack Integration */}
+            <div className="sm:col-span-2 pt-2 border-t border-slate-800 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-xs font-black uppercase tracking-wider text-sky-400">
+                    Dispatch Cloud Helm WMS Integration (https://api.myhelm.app/)
+                  </div>
+                  <div className="text-sm font-black text-white mt-0.5">
+                    Automatic Order Pick &amp; Order Pack Count Sync
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Pulls daily Order Pick and Order Pack counts automatically from Dispatch Cloud Helm so operatives never have to type order counts manually.
+                  </p>
+                </div>
+                <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-black text-emerald-300">
+                  {helmApiToken.trim() ? 'LIVE TOKEN CONFIGURED' : 'AUTO-SYNC READY'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-400 mb-1">
+                    Helm API Base URL / Tenant Endpoint
+                  </label>
+                  <input
+                    type="text"
+                    value={helmApiUrl}
+                    onChange={(e) => setHelmApiUrl(e.target.value)}
+                    placeholder="https://api.myhelm.app"
+                    className="w-full h-11 px-3 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-400 mb-1">
+                    Helm API Bearer Token (Optional)
+                  </label>
+                  <input
+                    type="password"
+                    value={helmApiToken}
+                    onChange={(e) => setHelmApiToken(e.target.value)}
+                    placeholder="Bearer token from myhelm.app > Settings > API"
+                    className="w-full h-11 px-3 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-xs"
+                  />
+                </div>
+              </div>
+
+              <label className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-950 border border-slate-800 cursor-pointer hover:border-slate-700 transition">
+                <input
+                  type="checkbox"
+                  checked={helmAutoSync}
+                  onChange={(e) => setHelmAutoSync(e.target.checked)}
+                  className="w-4 h-4 mt-0.5 rounded accent-sky-400 shrink-0"
+                />
+                <div>
+                  <div className="text-xs font-black uppercase tracking-wider text-white">
+                    Auto-Sync Order Pick &amp; Order Pack Counts When Operatives Stop a Run
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Automatically queries <code className="text-sky-300">{helmApiUrl || 'https://api.myhelm.app'}/public-api/orders</code> whenever a <code className="text-slate-300">STD-PICK</code> or <code className="text-slate-300">STD-PACK</code> timer stops.
+                  </div>
+                </div>
+              </label>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleTestHelmConnection}
+                  className="px-3.5 py-2 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-xs font-black text-sky-300 transition"
+                >
+                  Test Helm API Connection
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleSyncHelmNow}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-black text-emerald-300 transition"
+                >
+                  Sync Today&apos;s Pick &amp; Pack Orders Now
+                </button>
+              </div>
+
+              {helmStatusMsg && (
+                <div className="p-3 rounded-xl bg-slate-950 border border-sky-500/40 text-xs font-semibold text-sky-200">
+                  {helmStatusMsg}
+                </div>
+              )}
             </div>
           </div>
 

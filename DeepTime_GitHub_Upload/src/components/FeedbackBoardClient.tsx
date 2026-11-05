@@ -7,10 +7,12 @@ import {
 } from '@/app/actions';
 import {
   compressImageFileToDataUrl,
+  FEEDBACK_DEVICE_OPTIONS,
   FEEDBACK_STATUS_META,
 } from '@/components/FeedbackModal';
 import { appendTranscript, VoiceMicButton } from '@/components/VoiceMicButton';
 import {
+  FeedbackDeviceType,
   FeedbackReport,
   FeedbackSeverity,
   FeedbackStatus,
@@ -22,16 +24,20 @@ import {
   Bug,
   Camera,
   CheckCircle2,
+  ClipboardPaste,
   Clock,
   ImagePlus,
   LayoutGrid,
   Lightbulb,
   List,
   MessageSquarePlus,
+  Monitor,
   Plus,
   RefreshCw,
+  ScanBarcode,
   Search,
   Send,
+  Smartphone,
   Sparkles,
   Trash2,
   X,
@@ -82,6 +88,7 @@ export function FeedbackBoardClient({
   const [reports, setReports] = useState<FeedbackReport[]>(initialReports);
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
   const [filterType, setFilterType] = useState<'all' | 'feature' | 'bug'>('all');
+  const [filterDevice, setFilterDevice] = useState<'all' | FeedbackDeviceType>('all');
   const [searchText, setSearchText] = useState('');
   const [showClosed, setShowClosed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -92,10 +99,12 @@ export function FeedbackBoardClient({
   const [showNewModal, setShowNewModal] = useState(false);
   const [newType, setNewType] = useState<FeedbackType>('feature');
   const [newSeverity, setNewSeverity] = useState<FeedbackSeverity>('medium');
+  const [newDeviceType, setNewDeviceType] = useState<FeedbackDeviceType | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newPagePath, setNewPagePath] = useState('/now');
   const [newAttachments, setNewAttachments] = useState<string[]>([]);
+  const [pasteNotice, setPasteNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Inline Progress Update state
@@ -125,16 +134,17 @@ export function FeedbackBoardClient({
     return reports.filter((r) => {
       if (!showClosed && r.status === 'closed' && viewMode === 'list') return false;
       if (filterType !== 'all' && r.type !== filterType) return false;
+      if (filterDevice !== 'all' && r.device_type !== filterDevice) return false;
       if (searchText.trim()) {
         const q = searchText.trim().toLowerCase();
-        const hay = `${r.title} ${r.description} ${r.reporter_name} ${r.admin_note || ''} ${r.page_path}`.toLowerCase();
+        const hay = `${r.title} ${r.description} ${r.reporter_name} ${r.admin_note || ''} ${r.page_path} ${r.device_type || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [reports, filterType, searchText, showClosed, viewMode]);
+  }, [reports, filterType, filterDevice, searchText, showClosed, viewMode]);
 
-  const handleFilesSelected = async (files: FileList | File[] | null) => {
+  const handleFilesSelected = useCallback(async (files: FileList | File[] | null) => {
     if (!files) return;
     const list = Array.from(files).filter((f) => f.type.startsWith('image/'));
     if (list.length === 0) return;
@@ -148,7 +158,58 @@ export function FeedbackBoardClient({
         // ignore
       }
     }
-    setNewAttachments((prev) => [...prev, ...encoded].slice(0, 6));
+    if (encoded.length > 0) {
+      setNewAttachments((prev) => [...prev, ...encoded].slice(0, 6));
+      setPasteNotice(`✓ Pasted ${encoded.length} screenshot${encoded.length > 1 ? 's' : ''}`);
+      setTimeout(() => setPasteNotice(null), 3500);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!showNewModal) return;
+    const onGlobalPaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const imageFiles: File[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) imageFiles.push(file);
+        }
+      }
+      if (imageFiles.length > 0) {
+        e.preventDefault();
+        await handleFilesSelected(imageFiles);
+      }
+    };
+    window.addEventListener('paste', onGlobalPaste);
+    return () => window.removeEventListener('paste', onGlobalPaste);
+  }, [showNewModal, handleFilesSelected]);
+
+  const handlePasteFromClipboardButton = async () => {
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.read) {
+        setPasteNotice('Press Ctrl+V (or Cmd+V) right now to paste your screenshot!');
+        return;
+      }
+      const clipboardItems = await navigator.clipboard.read();
+      const files: File[] = [];
+      for (const item of clipboardItems) {
+        const imgType = item.types.find((t) => t.startsWith('image/'));
+        if (imgType) {
+          const blob = await item.getType(imgType);
+          files.push(new File([blob], `clipboard-screenshot-${Date.now()}.png`, { type: imgType }));
+        }
+      }
+      if (files.length === 0) {
+        setPasteNotice('No screenshot image found in clipboard. Take a screenshot then press Ctrl+V.');
+        return;
+      }
+      await handleFilesSelected(files);
+    } catch {
+      setPasteNotice('Press Ctrl+V (or Cmd+V) anywhere in this modal to paste your screenshot!');
+    }
   };
 
   const handlePasteClipboard = async (e: React.ClipboardEvent) => {
@@ -163,6 +224,7 @@ export function FeedbackBoardClient({
       }
     }
     if (imageFiles.length > 0) {
+      e.preventDefault();
       await handleFilesSelected(imageFiles);
     }
   };
@@ -174,6 +236,7 @@ export function FeedbackBoardClient({
     const res = await submitFeedbackReportAction({
       type: newType,
       severity: newSeverity,
+      deviceType: newDeviceType,
       title: newTitle,
       description: newDesc,
       pagePath: newPagePath,
@@ -185,6 +248,7 @@ export function FeedbackBoardClient({
     if (res.ok) {
       setNewTitle('');
       setNewDesc('');
+      setNewDeviceType(null);
       setNewAttachments([]);
       setShowNewModal(false);
       setBanner(
@@ -261,6 +325,18 @@ export function FeedbackBoardClient({
             <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 font-mono text-[10px] text-slate-400">
               {item.page_path}
             </span>
+
+            {item.device_type && (
+              <span
+                className={`px-2 py-0.5 rounded-md border text-[10px] font-black uppercase ${
+                  FEEDBACK_DEVICE_OPTIONS.find((d) => d.value === item.device_type)
+                    ?.badgeClass || 'bg-slate-800 text-slate-300 border-slate-700'
+                }`}
+              >
+                {FEEDBACK_DEVICE_OPTIONS.find((d) => d.value === item.device_type)
+                  ?.label || item.device_type}
+              </span>
+            )}
           </div>
 
           {isStaff ? (
@@ -503,6 +579,19 @@ export function FeedbackBoardClient({
             </button>
           ))}
 
+          <select
+            value={filterDevice}
+            onChange={(e) => setFilterDevice(e.target.value as any)}
+            className="h-9 px-3 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 focus:outline-none focus:border-emerald-500"
+          >
+            <option value="all">All Devices</option>
+            {FEEDBACK_DEVICE_OPTIONS.map((dev) => (
+              <option key={dev.value} value={dev.value}>
+                Device: {dev.label}
+              </option>
+            ))}
+          </select>
+
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
@@ -652,6 +741,51 @@ export function FeedbackBoardClient({
             </div>
 
             <div>
+              <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
+                <label className="block text-xs font-bold uppercase text-slate-400">
+                  Device Category <span className="text-slate-500 font-normal normal-case">(Optional — leave blank if across all devices)</span>
+                </label>
+                {newDeviceType && (
+                  <button
+                    type="button"
+                    onClick={() => setNewDeviceType(null)}
+                    className="text-[11px] font-bold text-slate-400 hover:text-white underline"
+                  >
+                    Clear (All Devices)
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {FEEDBACK_DEVICE_OPTIONS.map((dev) => {
+                  const isSelected = newDeviceType === dev.value;
+                  return (
+                    <button
+                      key={dev.value}
+                      type="button"
+                      onClick={() =>
+                        setNewDeviceType((prev) => (prev === dev.value ? null : dev.value))
+                      }
+                      className={`py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                        isSelected
+                          ? dev.badgeClass
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {dev.value === 'desktop' ? (
+                        <Monitor className="w-3.5 h-3.5 shrink-0" />
+                      ) : dev.value === 'scanner' ? (
+                        <ScanBarcode className="w-3.5 h-3.5 shrink-0" />
+                      ) : (
+                        <Smartphone className="w-3.5 h-3.5 shrink-0" />
+                      )}
+                      <span>{dev.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
               <div className="flex items-center justify-between gap-2 mb-1">
                 <label className="block text-xs font-bold uppercase text-slate-300">
                   Short Summary *
@@ -706,7 +840,7 @@ export function FeedbackBoardClient({
               />
 
               <div className="mt-2.5 p-3 rounded-xl bg-slate-950 border border-dashed border-slate-700 space-y-2">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                     <Camera className="w-4 h-4 text-emerald-400" />
                     Attached Photos ({newAttachments.length}/6)
@@ -722,15 +856,30 @@ export function FeedbackBoardClient({
                     }}
                     className="hidden"
                   />
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-black inline-flex items-center gap-1.5"
-                  >
-                    <ImagePlus className="w-3.5 h-3.5" />
-                    + Attach Photo / Screenshot
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handlePasteFromClipboardButton}
+                      className="px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-200 border border-sky-500/40 text-xs font-black inline-flex items-center gap-1.5"
+                    >
+                      <ClipboardPaste className="w-3.5 h-3.5" />
+                      📋 Paste Screenshot (Ctrl+V)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-black inline-flex items-center gap-1.5"
+                    >
+                      <ImagePlus className="w-3.5 h-3.5" />
+                      + Upload File
+                    </button>
+                  </div>
                 </div>
+                {pasteNotice && (
+                  <div className="text-xs font-bold text-emerald-300 bg-emerald-950/60 border border-emerald-500/30 rounded-lg px-2.5 py-1.5">
+                    {pasteNotice}
+                  </div>
+                )}
 
                 {newAttachments.length > 0 && (
                   <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-1">
