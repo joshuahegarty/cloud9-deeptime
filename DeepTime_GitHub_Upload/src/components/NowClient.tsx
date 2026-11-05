@@ -244,11 +244,11 @@ export function NowClient({
     return clients;
   }, [clients, MULTI_CLIENT_DEFAULT]);
 
-  // Start task selector state
+  // Start task selector state (never auto-select a customer; only Resume Last Task auto-picks its customer)
   const [startTab, setStartTab] = useState<'pick' | 'type'>('pick');
-  const [selectedClientId, setSelectedClientId] = useState<string>(
-    clients[0]?.id ?? MULTI_CLIENT_ID
-  );
+  const [selectedClientId, setSelectedClientId] = useState<string>('');
+  const [clientRequiredWarning, setClientRequiredWarning] = useState<string | null>(null);
+  const step1ClientSectionRef = React.useRef<HTMLElement | null>(null);
   const [directoryLetter, setDirectoryLetter] = useState<ReelLetter>('ALL');
   const [clientSearchText, setClientSearchText] = useState<string>('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('ALL');
@@ -417,13 +417,16 @@ export function NowClient({
 
   const selectedClient = useMemo(
     () =>
-      effectiveClients.find((c) => c.id === selectedClientId) ??
-      effectiveClients[0],
+      selectedClientId
+        ? effectiveClients.find((c) => c.id === selectedClientId)
+        : undefined,
     [effectiveClients, selectedClientId]
   );
 
-  const isMultiClientSelected =
-    selectedClient?.code === 'MULTI' || selectedClientId === MULTI_CLIENT_ID;
+  const isMultiClientSelected = Boolean(
+    selectedClient &&
+      (selectedClient.code === 'MULTI' || selectedClientId === MULTI_CLIENT_ID)
+  );
 
   // Clients excluding Multi-Client for the alphabetical directory list
   const alphabeticalClients = useMemo(() => {
@@ -809,6 +812,8 @@ export function NowClient({
         setConfirmStartModal(null);
         setShowStopUnitsModal(false);
         setPendingSwitchAction(null);
+        setSelectedClientId('');
+        setClientRequiredWarning(null);
         setLocalLastActivityMs(Date.now());
         pingToTopTimer(task.name, targetClient.name);
         router.refresh();
@@ -847,6 +852,8 @@ export function NowClient({
       setConfirmStartModal(null);
       setShowStopUnitsModal(false);
       setPendingSwitchAction(null);
+      setSelectedClientId('');
+      setClientRequiredWarning(null);
       setLocalLastActivityMs(Date.now());
       pingToTopTimer(task.name, targetClient.name);
       setFeedback('Queued offline — will sync automatically on reconnect.');
@@ -896,6 +903,18 @@ export function NowClient({
     );
   };
 
+  const promptSelectClientFirst = (taskName: string) => {
+    const msg = `Please select a customer in Step 1 first before starting "${taskName}".`;
+    setClientRequiredWarning(msg);
+    setFeedback(msg);
+    if (typeof window !== 'undefined') {
+      step1ClientSectionRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }
+  };
+
   // Direct 1-tap Task Start (or via Confirm Modal when orderRef / barcode scan / Rework description is used)
   const executeStartTask = async (
     task: TaskType,
@@ -908,8 +927,11 @@ export function NowClient({
     const targetClient =
       overrideClient ??
       (task.client_id ? clients.find((c) => c.id === task.client_id) : undefined) ??
-      selectedClient;
-    if (!targetClient) return;
+      (isHousekeepingOrInternal(task) ? MULTI_CLIENT_DEFAULT : selectedClient);
+    if (!targetClient) {
+      promptSelectClientFirst(task.name);
+      return;
+    }
 
     // Require a mandatory description when starting Rework
     if (isReworkTask(task) && !orderRefValue?.trim()) {
@@ -973,8 +995,11 @@ export function NowClient({
     const targetClient =
       overrideClient ??
       (task.client_id ? clients.find((c) => c.id === task.client_id) : undefined) ??
-      selectedClient;
-    if (!targetClient) return;
+      (isHousekeepingOrInternal(task) ? MULTI_CLIENT_DEFAULT : selectedClient);
+    if (!targetClient) {
+      promptSelectClientFirst(task.name);
+      return;
+    }
     setOrderRefInput('');
     setInitialUnitsInput('');
     setConfirmStartModal({ task, targetClient, source });
@@ -1068,6 +1093,8 @@ export function NowClient({
     setShowUnlistedModal(false);
     setShowStopUnitsModal(false);
     setPendingSwitchAction(null);
+    setSelectedClientId('');
+    setClientRequiredWarning(null);
     setUnlistedTitle('');
     setUnlistedOrderRef('');
     setUnlistedUnitLabel('');
@@ -1669,6 +1696,8 @@ export function NowClient({
 
     if (phrase.includes('resume')) {
       if (lastStoppedWithin30Mins) {
+        setSelectedClientId(lastStoppedWithin30Mins.client.id);
+        setClientRequiredWarning(null);
         await executeStartTask(
           lastStoppedWithin30Mins.task,
           'picked',
@@ -1679,12 +1708,15 @@ export function NowClient({
       }
       const fallbackRecent = last5Tasks[0];
       if (fallbackRecent) {
-        const clientObj =
-          effectiveClients.find((c) => c.id === fallbackRecent.client_id) ||
-          selectedClient ||
-          MULTI_CLIENT_DEFAULT;
-        await executeStartTask(fallbackRecent, 'picked', clientObj);
-        return;
+        const clientObj = effectiveClients.find(
+          (c) => c.id === fallbackRecent.client_id
+        );
+        if (clientObj) {
+          setSelectedClientId(clientObj.id);
+          setClientRequiredWarning(null);
+          await executeStartTask(fallbackRecent, 'picked', clientObj);
+          return;
+        }
       }
       setFeedback('Voice Command: No recent task found to resume.');
       return;
@@ -1695,7 +1727,7 @@ export function NowClient({
         taskTypes.find((t) => t.code === 'STD-PACK') ||
         taskTypes.find((t) => t.name.toLowerCase().includes('pack'));
       if (packTask) {
-        await executeStartTask(packTask, 'picked', selectedClient || MULTI_CLIENT_DEFAULT);
+        await executeStartTask(packTask, 'picked', selectedClient);
         return;
       }
     }
@@ -1705,7 +1737,7 @@ export function NowClient({
         taskTypes.find((t) => t.code === 'STD-PICK') ||
         taskTypes.find((t) => t.name.toLowerCase().includes('pick'));
       if (pickTask) {
-        await executeStartTask(pickTask, 'picked', selectedClient || MULTI_CLIENT_DEFAULT);
+        await executeStartTask(pickTask, 'picked', selectedClient);
         return;
       }
     }
@@ -2146,14 +2178,16 @@ export function NowClient({
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() =>
+                  onClick={() => {
+                    setSelectedClientId(lastStoppedWithin30Mins.client.id);
+                    setClientRequiredWarning(null);
                     executeStartTask(
                       lastStoppedWithin30Mins.task,
                       'picked',
                       lastStoppedWithin30Mins.client,
                       lastStoppedWithin30Mins.entry.order_ref
-                    )
-                  }
+                    );
+                  }}
                   className="w-full min-h-[68px] px-5 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black shadow-xl shadow-emerald-500/20 flex items-center justify-between gap-3 transition active:scale-[0.99]"
                 >
                   <div className="flex items-center gap-3 text-left min-w-0">
@@ -2452,7 +2486,13 @@ export function NowClient({
                         <button
                           type="button"
                           disabled={busy || isCurrentlyRunning}
-                          onClick={() => executeStartTask(task, 'picked', matchedClient)}
+                          onClick={() => {
+                            if (matchedClient) {
+                              setSelectedClientId(matchedClient.id);
+                              setClientRequiredWarning(null);
+                            }
+                            executeStartTask(task, 'picked', matchedClient);
+                          }}
                           className="play-btn w-11 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/20 transition"
                           title="Resume task immediately"
                         >
@@ -2584,7 +2624,29 @@ export function NowClient({
       </div>
 
       {/* STATION 01: CLIENT & ACCOUNT SELECTION ("PURCHASE / CLIENT SELECTION") */}
-      <section className="bg-[#0B101D] border-2 border-teal-500/35 border-l-[6px] border-l-[#2DD4BF] rounded-3xl p-5 sm:p-6 space-y-4 shadow-2xl">
+      <section
+        ref={step1ClientSectionRef}
+        className={`bg-[#0B101D] border-2 border-l-[6px] rounded-3xl p-5 sm:p-6 space-y-4 shadow-2xl transition ${
+          clientRequiredWarning
+            ? 'border-amber-400 border-l-amber-400 ring-2 ring-amber-400/30'
+            : 'border-teal-500/35 border-l-[#2DD4BF]'
+        }`}
+      >
+        {clientRequiredWarning && (
+          <div className="p-3.5 rounded-2xl bg-amber-500/20 border-2 border-amber-400 text-amber-200 text-xs sm:text-sm font-black flex items-center justify-between gap-3 animate-pulse">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-300 shrink-0" />
+              <span>{clientRequiredWarning}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setClientRequiredWarning(null)}
+              className="p-1.5 rounded-lg bg-slate-950/60 text-amber-200 hover:text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-teal-500/20">
           <div className="flex items-center gap-2.5">
             <span className="px-2.5 py-1 rounded-xl bg-[#2DD4BF] text-slate-950 text-xs font-black tracking-wider shadow-sm">
@@ -2635,7 +2697,10 @@ export function NowClient({
 
         {/* Dedicated Multi-Client / Consolidated 3PL Option */}
         <div
-          onClick={() => setSelectedClientId(MULTI_CLIENT_ID)}
+          onClick={() => {
+            setSelectedClientId(MULTI_CLIENT_ID);
+            setClientRequiredWarning(null);
+          }}
           className={`p-3.5 sm:p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between gap-3 card-interactive ${
             isMultiClientSelected
               ? 'card-selected bg-teal-500/15 border-[#2DD4BF] text-white shadow-md shadow-teal-500/10'
@@ -2769,7 +2834,10 @@ export function NowClient({
                   <button
                     key={c.id}
                     type="button"
-                    onClick={() => setSelectedClientId(c.id)}
+                    onClick={() => {
+                      setSelectedClientId(c.id);
+                      setClientRequiredWarning(null);
+                    }}
                     className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between gap-2.5 card-interactive ${
                       active
                         ? 'card-selected bg-teal-500/15 border-[#2DD4BF] text-white shadow-sm'
@@ -2818,7 +2886,12 @@ export function NowClient({
         <div className="p-2.5 px-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2">
             <span className="text-slate-400 font-medium">Target Context:</span>
-            {isMultiClientSelected ? (
+            {!selectedClient ? (
+              <span className="font-bold text-amber-300 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                No Customer Selected — Choose a customer above (or Multi-Client) first
+              </span>
+            ) : isMultiClientSelected ? (
               <span className="font-bold text-[#2DD4BF] flex items-center gap-1.5">
                 <Globe className="w-3.5 h-3.5" />
                 Multi-Client / Consolidated 3PL
@@ -2826,14 +2899,16 @@ export function NowClient({
             ) : (
               <span className="font-bold text-[#2DD4BF] flex items-center gap-1.5">
                 <Building2 className="w-3.5 h-3.5" />
-                [{selectedClient?.code}] {selectedClient?.name}
+                [{selectedClient.code}] {selectedClient.name}
               </span>
             )}
           </div>
           <span className="text-[11px] text-slate-400">
-            {isMultiClientSelected
-              ? 'Standard warehouse SOPs ready for mixed / universal batches'
-              : `Bespoke SOW & standard tasks loaded for ${selectedClient?.code}`}
+            {!selectedClient
+              ? 'Customer selection required before starting a task (unless resuming your last task)'
+              : isMultiClientSelected
+                ? 'Standard warehouse SOPs ready for mixed / universal batches'
+                : `Bespoke SOW & standard tasks loaded for ${selectedClient.code}`}
           </span>
         </div>
       </section>
@@ -2967,11 +3042,17 @@ export function NowClient({
               </span>
               <span>
                 Click any section bar below to expand tasks for{' '}
-                <strong className="text-[#2DD4BF]">
-                  {isMultiClientSelected
-                    ? 'Multi-Client / Consolidated'
-                    : `${selectedClient?.name} (${selectedClient?.code})`}
-                </strong>
+                {!selectedClient ? (
+                  <strong className="text-amber-300">
+                    (Select a Customer in Step 1 First)
+                  </strong>
+                ) : (
+                  <strong className="text-[#2DD4BF]">
+                    {isMultiClientSelected
+                      ? 'Multi-Client / Consolidated'
+                      : `${selectedClient.name} (${selectedClient.code})`}
+                  </strong>
+                )}
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -3129,9 +3210,11 @@ export function NowClient({
                             <span className="text-slate-400">
                               Target:{' '}
                               <strong className="text-sky-300 font-medium">
-                                {isMultiClientSelected
-                                  ? 'Multi-Client Wave'
-                                  : selectedClient?.name}
+                                {!selectedClient
+                                  ? 'Select Customer in Step 1'
+                                  : isMultiClientSelected
+                                    ? 'Multi-Client Wave'
+                                    : selectedClient.name}
                               </strong>
                             </span>
                             {(isManagerOrAdmin || settings.show_targets_to_operatives) &&
@@ -3341,7 +3424,7 @@ export function NowClient({
 
             {expandedTaskSections.bespoke && (
               <div className="p-4 sm:p-5 border-t border-amber-500/25 bg-[#120B04]">
-                {isMultiClientSelected ? (
+                {!selectedClient || isMultiClientSelected ? (
                   <div className="p-5 sm:p-6 rounded-2xl bg-amber-950/30 border-2 border-dashed border-amber-500/40 flex flex-col sm:flex-row items-center justify-between gap-4 text-left">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center shrink-0">
@@ -3349,22 +3432,26 @@ export function NowClient({
                       </div>
                       <div>
                         <h4 className="text-[15px] font-bold text-amber-200">
-                          Multi-Client / Consolidated Batch Active
+                          {!selectedClient
+                            ? 'Select a Customer in Step 1 First'
+                            : 'Multi-Client / Consolidated Batch Active'}
                         </h4>
                         <p className="text-xs text-amber-200/80 max-w-xl mt-1 leading-relaxed">
-                          Standard Warehouse Tasks above are ready for any consolidated wave. Bespoke Client Tasks are tailored to individual clients — select a specific client in <strong className="text-white">Step 1</strong> to view its custom tasks.
+                          Bespoke Client Tasks are tailored to individual clients — select a specific customer in <strong className="text-white">Step 1</strong> above to view its custom tasks.
                         </p>
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={() => {
-                        const firstAlphabetical = alphabeticalClients[0];
-                        if (firstAlphabetical) setSelectedClientId(firstAlphabetical.id);
+                        step1ClientSectionRef.current?.scrollIntoView({
+                          behavior: 'smooth',
+                          block: 'center',
+                        });
                       }}
                       className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black shrink-0 transition shadow"
                     >
-                      Select a Client
+                      Go to Step 1
                     </button>
                   </div>
                 ) : (
@@ -3559,10 +3646,16 @@ export function NowClient({
                 {bespokeProjectsList.length === 0 ? (
                   <div className="p-4 rounded-2xl bg-slate-950/60 border border-violet-500/25 text-xs text-slate-400 flex items-center justify-between gap-3">
                     <span>
-                      No multi-part Bespoke Projects configured for{' '}
-                      <strong className="text-white">{selectedClient?.name}</strong> yet.
-                      (Try selecting <strong>CCELL Direct</strong> or{' '}
-                      <strong>Payload Drinks</strong> to view the sample FSDU Build Project folder.)
+                      {!selectedClient ? (
+                        <>
+                          Select a customer in <strong className="text-white">Step 1</strong> above to view its multi-part Bespoke Projects.
+                        </>
+                      ) : (
+                        <>
+                          No multi-part Bespoke Projects configured for{' '}
+                          <strong className="text-white">{selectedClient.name}</strong> yet.
+                        </>
+                      )}
                     </span>
                   </div>
                 ) : (

@@ -14,6 +14,7 @@ import {
   Activity,
   BookOpen,
   Bug,
+  ChevronDown,
   ClipboardList,
   Clock,
   FileSpreadsheet,
@@ -103,6 +104,9 @@ export function AppShell({ user, children }: AppShellProps) {
   const [lightMode, setLightMode] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const moreMenuRef = React.useRef<HTMLDivElement | null>(null);
   const [demoSwitcherUnlocked, setDemoSwitcherUnlocked] = useState(false);
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [currentPinInput, setCurrentPinInput] = useState('');
@@ -118,7 +122,28 @@ export function AppShell({ user, children }: AppShellProps) {
 
   useEffect(() => {
     setMobileMenuOpen(false);
+    setMoreMenuOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!moreMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setMoreMenuOpen(false);
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMoreMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [moreMenuOpen]);
 
   useEffect(() => {
     if (user?.must_change_pin) {
@@ -357,8 +382,8 @@ export function AppShell({ user, children }: AppShellProps) {
             </div>
           </Link>
 
-          {/* Desktop Navigation Links (>= lg) */}
-          <nav className="hidden lg:flex items-center gap-1 overflow-x-auto no-scrollbar py-1">
+          {/* Desktop Navigation Links (>= lg): Primary links always visible + Collapsible More menu */}
+          <nav className="hidden lg:flex items-center gap-1 py-1">
             {user && (
               <>
                 <NavLink
@@ -375,7 +400,7 @@ export function AppShell({ user, children }: AppShellProps) {
                       active={pathname === '/floor'}
                       icon={<Activity className="w-3.5 h-3.5" />}
                     >
-                      Floor
+                      Floor Live
                     </NavLink>
                     <NavLink
                       href="/entries"
@@ -391,36 +416,114 @@ export function AppShell({ user, children }: AppShellProps) {
                     >
                       Reports
                     </NavLink>
-                    <NavLink
-                      href="/reports/billing"
-                      active={pathname === '/reports/billing'}
-                      icon={<Receipt className="w-3.5 h-3.5" />}
-                    >
-                      Billing
-                    </NavLink>
-                    <NavLink
-                      href="/setup"
-                      active={pathname.startsWith('/setup')}
-                      icon={<Settings className="w-3.5 h-3.5" />}
-                    >
-                      Setup
-                    </NavLink>
                   </>
                 )}
-                <NavLink
-                  href="/feedback"
-                  active={pathname === '/feedback'}
-                  icon={<Bug className="w-3.5 h-3.5" />}
-                >
-                  Feedback &amp; Roadmap
-                </NavLink>
-                <NavLink
-                  href="/guide"
-                  active={pathname === '/guide'}
-                  icon={<BookOpen className="w-3.5 h-3.5" />}
-                >
-                  Guide &amp; Mindmap
-                </NavLink>
+
+                {/* Collapsible Secondary Menu: Billing, Setup, Feedback Board, Guide & Mindmap */}
+                <div className="relative ml-1" ref={moreMenuRef}>
+                  {(() => {
+                    const isSecondaryActive =
+                      pathname === '/reports/billing' ||
+                      pathname.startsWith('/setup') ||
+                      pathname === '/feedback' ||
+                      pathname === '/guide';
+                    const activeSecondaryLabel =
+                      pathname === '/reports/billing'
+                        ? 'Billing'
+                        : pathname.startsWith('/setup')
+                          ? 'Setup'
+                          : pathname === '/feedback'
+                            ? 'Feedback Board'
+                            : pathname === '/guide'
+                              ? 'Guide & Mindmap'
+                              : null;
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => setMoreMenuOpen((prev) => !prev)}
+                        aria-expanded={moreMenuOpen}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap inline-flex items-center gap-1.5 ${
+                          isSecondaryActive || moreMenuOpen
+                            ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                            : 'text-slate-300 hover:text-white hover:bg-slate-800/80 border border-slate-800/80'
+                        }`}
+                      >
+                        <Menu className="w-3.5 h-3.5" />
+                        <span>
+                          {activeSecondaryLabel
+                            ? `More · ${activeSecondaryLabel}`
+                            : 'More'}
+                        </span>
+                        <ChevronDown
+                          className={`w-3.5 h-3.5 transition-transform ${
+                            moreMenuOpen ? 'rotate-180' : ''
+                          }`}
+                        />
+                      </button>
+                    );
+                  })()}
+
+                  {moreMenuOpen && (
+                    <div className="absolute left-0 mt-2 w-56 rounded-2xl bg-slate-900 border border-slate-700/90 shadow-2xl p-1.5 z-50 space-y-1">
+                      <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                        Admin, Feedback &amp; Guides
+                      </div>
+                      {isStaff && (
+                        <>
+                          <Link
+                            href="/reports/billing"
+                            onClick={() => setMoreMenuOpen(false)}
+                            className={`w-full px-3 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2.5 transition ${
+                              pathname === '/reports/billing'
+                                ? 'bg-emerald-500 text-slate-950 font-black'
+                                : 'text-slate-200 hover:bg-slate-800 hover:text-white'
+                            }`}
+                          >
+                            <Receipt className="w-4 h-4 shrink-0" />
+                            <span>Billing</span>
+                          </Link>
+                          <Link
+                            href="/setup"
+                            onClick={() => setMoreMenuOpen(false)}
+                            className={`w-full px-3 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2.5 transition ${
+                              pathname.startsWith('/setup')
+                                ? 'bg-emerald-500 text-slate-950 font-black'
+                                : 'text-slate-200 hover:bg-slate-800 hover:text-white'
+                            }`}
+                          >
+                            <Settings className="w-4 h-4 shrink-0" />
+                            <span>Setup</span>
+                          </Link>
+                        </>
+                      )}
+                      <Link
+                        href="/feedback"
+                        onClick={() => setMoreMenuOpen(false)}
+                        className={`w-full px-3 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2.5 transition ${
+                          pathname === '/feedback'
+                            ? 'bg-emerald-500 text-slate-950 font-black'
+                            : 'text-slate-200 hover:bg-slate-800 hover:text-white'
+                        }`}
+                      >
+                        <Bug className="w-4 h-4 shrink-0" />
+                        <span>Feedback Board</span>
+                      </Link>
+                      <Link
+                        href="/guide"
+                        onClick={() => setMoreMenuOpen(false)}
+                        className={`w-full px-3 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2.5 transition ${
+                          pathname === '/guide'
+                            ? 'bg-emerald-500 text-slate-950 font-black'
+                            : 'text-slate-200 hover:bg-slate-800 hover:text-white'
+                        }`}
+                      >
+                        <BookOpen className="w-4 h-4 shrink-0" />
+                        <span>Guide &amp; Mindmap</span>
+                      </Link>
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </nav>
@@ -626,11 +729,11 @@ export function AppShell({ user, children }: AppShellProps) {
         {mobileMenuOpen && user && (
           <div className="lg:hidden border-t border-slate-800 bg-slate-950/98 px-3.5 py-4 space-y-4 shadow-2xl animate-in slide-in-from-top-2">
             {/* Navigation Grid (Touch-Friendly 48px+ Tiles for Android / Mobile) */}
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 px-1">
-                Navigation Menu
+            <div className="space-y-2.5">
+              <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 px-1">
+                Main Navigation
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <Link
                   href="/now"
                   onClick={() => setMobileMenuOpen(false)}
@@ -681,56 +784,81 @@ export function AppShell({ user, children }: AppShellProps) {
                       <FileSpreadsheet className="w-4 h-4 shrink-0" />
                       <span>Reports</span>
                     </Link>
-                    <Link
-                      href="/reports/billing"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
-                        pathname === '/reports/billing'
-                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
-                          : 'bg-slate-900 text-slate-200 border-slate-800'
-                      }`}
-                    >
-                      <Receipt className="w-4 h-4 shrink-0" />
-                      <span>Billing</span>
-                    </Link>
-                    <Link
-                      href="/setup"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
-                        pathname.startsWith('/setup')
-                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
-                          : 'bg-slate-900 text-slate-200 border-slate-800'
-                      }`}
-                    >
-                      <Settings className="w-4 h-4 shrink-0" />
-                      <span>Setup</span>
-                    </Link>
                   </>
                 )}
-                <Link
-                  href="/feedback"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
-                    pathname === '/feedback'
-                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
-                      : 'bg-slate-900 text-slate-200 border-slate-800'
-                  }`}
+              </div>
+
+              {/* Collapsible Secondary Menu: Billing, Setup, Feedback Board, Guide & Mindmap */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setMobileMoreOpen((prev) => !prev)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-900 border border-slate-800 text-xs font-black text-slate-300 flex items-center justify-between transition"
                 >
-                  <Bug className="w-4 h-4 shrink-0" />
-                  <span>Feedback Board</span>
-                </Link>
-                <Link
-                  href="/guide"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
-                    pathname === '/guide'
-                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
-                      : 'bg-slate-900 text-slate-200 border-slate-800'
-                  }`}
-                >
-                  <BookOpen className="w-4 h-4 shrink-0" />
-                  <span>Guide &amp; Mindmap</span>
-                </Link>
+                  <span>More (Billing, Setup, Feedback Board &amp; Guide)</span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-emerald-400 transition-transform ${
+                      mobileMoreOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                {mobileMoreOpen && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
+                    {isStaff && (
+                      <>
+                        <Link
+                          href="/reports/billing"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
+                            pathname === '/reports/billing'
+                              ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                              : 'bg-slate-900 text-slate-200 border-slate-800'
+                          }`}
+                        >
+                          <Receipt className="w-4 h-4 shrink-0" />
+                          <span>Billing</span>
+                        </Link>
+                        <Link
+                          href="/setup"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
+                            pathname.startsWith('/setup')
+                              ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                              : 'bg-slate-900 text-slate-200 border-slate-800'
+                          }`}
+                        >
+                          <Settings className="w-4 h-4 shrink-0" />
+                          <span>Setup</span>
+                        </Link>
+                      </>
+                    )}
+                    <Link
+                      href="/feedback"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
+                        pathname === '/feedback'
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                          : 'bg-slate-900 text-slate-200 border-slate-800'
+                      }`}
+                    >
+                      <Bug className="w-4 h-4 shrink-0" />
+                      <span>Feedback Board</span>
+                    </Link>
+                    <Link
+                      href="/guide"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border transition ${
+                        pathname === '/guide'
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                          : 'bg-slate-900 text-slate-200 border-slate-800'
+                      }`}
+                    >
+                      <BookOpen className="w-4 h-4 shrink-0" />
+                      <span>Guide &amp; Mindmap</span>
+                    </Link>
+                  </div>
+                )}
               </div>
             </div>
 
