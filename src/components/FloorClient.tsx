@@ -1835,10 +1835,10 @@ export function FloorClient({
                     const additionalOps = sortedOps.filter((op) => !isPrimaryStaffMember(op));
                     return (
                       <>
-                        <optgroup label="⭐ Supervisors (Mark & Edna) & Core Warehouse">
+                        <optgroup label="Supervisors & Core Warehouse">
                           {primaryOps.map((op) => (
                             <option key={op.id} value={op.id}>
-                              {op.display_name} — {op.job_title || op.role}
+                              {op.display_name} ({op.job_title || op.role})
                             </option>
                           ))}
                         </optgroup>
@@ -1848,10 +1848,10 @@ export function FloorClient({
                           );
                           if (deptMembers.length === 0) return null;
                           return (
-                            <optgroup key={deptLabel} label={`Additional Staff — ${deptLabel}`}>
+                            <optgroup key={deptLabel} label={deptLabel}>
                               {deptMembers.map((op) => (
                                 <option key={op.id} value={op.id}>
-                                  {op.display_name} — {op.job_title || op.role}
+                                  {op.display_name}
                                 </option>
                               ))}
                             </optgroup>

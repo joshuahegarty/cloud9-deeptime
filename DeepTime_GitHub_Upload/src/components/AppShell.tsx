@@ -41,58 +41,57 @@ interface AppShellProps {
   children: React.ReactNode;
 }
 
-const PRIMARY_DEMO_USERS = [
-  { id: '00000000-0000-0000-0000-000000000004', label: '⭐ Mark — Supervisor • Core Warehouse' },
-  { id: '00000000-0000-0000-0000-000000000006', label: '⭐ Edna — Supervisor • Core Warehouse' },
-  { id: '00000000-0000-0000-0000-000000000001', label: 'Erica — Core Warehouse Operative' },
-  { id: '00000000-0000-0000-0000-000000000002', label: 'Sam — Core Warehouse Operative' },
-  { id: '00000000-0000-0000-0000-000000000003', label: 'Alex — Core Warehouse Operative' },
-  { id: '00000000-0000-0000-0000-000000000007', label: 'Mason — Core Warehouse Operative' },
+const DEMO_USER_GROUPS = [
+  {
+    group: 'Admins',
+    users: [
+      { id: '00000000-0000-0000-0000-000000000005', label: 'Josh (CEO & Admin)' },
+      { id: '00000000-0000-0000-0000-000000000011', label: 'Danielle (People & Ops)' },
+      { id: '00000000-0000-0000-0000-000000000009', label: 'Jess (Warehouse Admin)' },
+    ],
+  },
+  {
+    group: 'Supervisors',
+    users: [
+      { id: '00000000-0000-0000-0000-000000000004', label: 'Mark' },
+      { id: '00000000-0000-0000-0000-000000000006', label: 'Edna' },
+    ],
+  },
+  {
+    group: 'Core Warehouse',
+    users: [
+      { id: '00000000-0000-0000-0000-000000000003', label: 'Alex' },
+      { id: '00000000-0000-0000-0000-000000000001', label: 'Erica' },
+      { id: '00000000-0000-0000-0000-000000000007', label: 'Mason' },
+      { id: '00000000-0000-0000-0000-000000000002', label: 'Sam' },
+    ],
+  },
+  {
+    group: 'Warehouse & CCELL',
+    users: [
+      { id: '00000000-0000-0000-0000-000000000008', label: 'Ben (CCELL)' },
+      { id: '00000000-0000-0000-0000-000000000010', label: 'Sabine (Warehouse)' },
+    ],
+  },
+  {
+    group: 'Operations & Sales',
+    users: [
+      { id: '00000000-0000-0000-0000-000000000012', label: 'Billy (Operations)' },
+      { id: '00000000-0000-0000-0000-000000000013', label: 'Mike (Sales)' },
+      { id: '00000000-0000-0000-0000-000000000014', label: 'Ray (Sales & Warehouse)' },
+    ],
+  },
+  {
+    group: 'Marketing & Innovations',
+    users: [
+      { id: '00000000-0000-0000-0000-000000000015', label: 'Adrian' },
+      { id: '00000000-0000-0000-0000-000000000017', label: 'Ashton' },
+      { id: '00000000-0000-0000-0000-000000000016', label: 'Danny' },
+    ],
+  },
 ];
 
-const ADDITIONAL_DEMO_USER_GROUPS = [
-  {
-    dept: 'CCELL & Warehouse Support',
-    users: [
-      { id: '00000000-0000-0000-0000-000000000008', label: 'Ben — CCELL Operative' },
-      { id: '00000000-0000-0000-0000-000000000009', label: 'Jess — Admin • Warehouse Team' },
-      { id: '00000000-0000-0000-0000-000000000010', label: 'Sabine — Warehouse Operative' },
-    ],
-  },
-  {
-    dept: 'People & Operations',
-    users: [
-      { id: '00000000-0000-0000-0000-000000000011', label: 'Danielle — Head of People & Operations • Admin' },
-      { id: '00000000-0000-0000-0000-000000000012', label: 'Billy — Operations' },
-    ],
-  },
-  {
-    dept: 'Sales Team',
-    users: [
-      { id: '00000000-0000-0000-0000-000000000013', label: 'Mike — Sales' },
-      { id: '00000000-0000-0000-0000-000000000014', label: 'Ray — Sales • Warehouse Operative' },
-    ],
-  },
-  {
-    dept: 'Marketing & Innovations',
-    users: [
-      { id: '00000000-0000-0000-0000-000000000015', label: 'Adrian — Marketing & Innovations' },
-      { id: '00000000-0000-0000-0000-000000000016', label: 'Danny — Marketing & Innovations' },
-      { id: '00000000-0000-0000-0000-000000000017', label: 'Ashton — Marketing & Innovations' },
-    ],
-  },
-  {
-    dept: 'Executive & Admin',
-    users: [
-      { id: '00000000-0000-0000-0000-000000000005', label: 'Josh — CEO, Builder & Admin' },
-    ],
-  },
-];
-
-const DEMO_USERS = [
-  ...PRIMARY_DEMO_USERS,
-  ...ADDITIONAL_DEMO_USER_GROUPS.flatMap((g) => g.users),
-];
+const DEMO_USERS = DEMO_USER_GROUPS.flatMap((g) => g.users);
 
 export function AppShell({ user, children }: AppShellProps) {
   const pathname = usePathname();
@@ -609,17 +608,10 @@ export function AppShell({ user, children }: AppShellProps) {
                     value={user.id}
                     onChange={(e) => handleQuickSwitchUser(e.target.value)}
                     className="h-9 max-w-[195px] px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-100 border border-slate-700 focus:outline-none focus:border-emerald-500 cursor-pointer"
-                    title="Quick-switch user or role (Mark & Edna first, then Core Warehouse, then Additional Staff by Department)"
+                    title="Quick-switch user or role"
                   >
-                    <optgroup label="⭐ Supervisors (Mark & Edna) & Core Warehouse">
-                      {PRIMARY_DEMO_USERS.map((du) => (
-                        <option key={du.id} value={du.id}>
-                          {du.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                    {ADDITIONAL_DEMO_USER_GROUPS.map((grp) => (
-                      <optgroup key={grp.dept} label={`Additional Staff — ${grp.dept}`}>
+                    {DEMO_USER_GROUPS.map((grp) => (
+                      <optgroup key={grp.group} label={grp.group}>
                         {grp.users.map((du) => (
                           <option key={du.id} value={du.id}>
                             {du.label}
@@ -877,15 +869,8 @@ export function AppShell({ user, children }: AppShellProps) {
                     }}
                     className="w-full h-11 px-3 rounded-xl bg-slate-900 text-xs font-bold text-slate-100 border border-slate-700"
                   >
-                    <optgroup label="⭐ Supervisors (Mark & Edna) & Core Warehouse">
-                      {PRIMARY_DEMO_USERS.map((du) => (
-                        <option key={du.id} value={du.id}>
-                          {du.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                    {ADDITIONAL_DEMO_USER_GROUPS.map((grp) => (
-                      <optgroup key={grp.dept} label={`Additional Staff — ${grp.dept}`}>
+                    {DEMO_USER_GROUPS.map((grp) => (
+                      <optgroup key={grp.group} label={grp.group}>
                         {grp.users.map((du) => (
                           <option key={du.id} value={du.id}>
                             {du.label}

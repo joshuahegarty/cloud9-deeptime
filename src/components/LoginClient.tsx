@@ -241,12 +241,12 @@ export function LoginClient({ operatives }: LoginClientProps) {
                 className="w-full h-14 px-4 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-sm focus:outline-none focus:border-emerald-500"
               >
                 <option value="">Any User (Match by 4-Digit PIN)</option>
-                <optgroup label="⭐ Supervisors (Mark & Edna) & Core Warehouse">
+                <optgroup label="Supervisors & Core Warehouse">
                   {sortedOperatives
                     .filter((op) => isPrimaryStaffMember(op))
                     .map((op) => (
                       <option key={op.id} value={op.id}>
-                        {op.display_name} — {op.job_title || op.role}
+                        {op.display_name} ({op.job_title || op.role})
                       </option>
                     ))}
                 </optgroup>
@@ -258,10 +258,10 @@ export function LoginClient({ operatives }: LoginClientProps) {
                   );
                   if (deptMembers.length === 0) return null;
                   return (
-                    <optgroup key={deptLabel} label={`Additional Staff — ${deptLabel}`}>
+                    <optgroup key={deptLabel} label={deptLabel}>
                       {deptMembers.map((op) => (
                         <option key={op.id} value={op.id}>
-                          {op.display_name} — {op.job_title || op.role}
+                          {op.display_name}
                         </option>
                       ))}
                     </optgroup>
@@ -590,7 +590,7 @@ export function LoginClient({ operatives }: LoginClientProps) {
                 >
                   <div className="font-bold text-white flex items-center gap-1">
                     <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-                    ⭐ Mark
+                    Mark
                   </div>
                   <div className="text-[10px] text-emerald-300 font-bold">Supervisor • Core WH</div>
                   <div className="text-[10px] text-slate-400">PIN: 4444</div>
@@ -607,7 +607,7 @@ export function LoginClient({ operatives }: LoginClientProps) {
                 >
                   <div className="font-bold text-white flex items-center gap-1">
                     <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-                    ⭐ Edna
+                    Edna
                   </div>
                   <div className="text-[10px] text-emerald-300 font-bold">Supervisor • Core WH</div>
                   <div className="text-[10px] text-slate-400">PIN: 4445</div>

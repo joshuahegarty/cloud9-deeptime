@@ -931,7 +931,7 @@ export function SetupClient({
                 <div className="overflow-x-auto rounded-xl border border-slate-800">
                   <div className="px-4 py-2.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-emerald-400">
-                      ⭐ Supervisors (Mark &amp; Edna) &amp; Core Warehouse Operatives ({primaryUsers.length})
+                      Supervisors (Mark &amp; Edna) &amp; Core Warehouse Operatives ({primaryUsers.length})
                     </span>
                   </div>
                   <table className="w-full text-left border-collapse text-sm">
@@ -1885,7 +1885,7 @@ export function SetupClient({
                 }
                 className="w-4 h-4 rounded accent-emerald-500"
               />
-              ⭐ Core Warehouse Team Member (Erica, Sam, Alex, Mason, Mark, Edna)
+              Core Warehouse Team Member (Erica, Sam, Alex, Mason, Mark, Edna)
             </label>
 
             <div>
