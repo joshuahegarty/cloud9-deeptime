@@ -62,6 +62,10 @@ export async function loginStaffAction(params: {
     email = 'mark@cloud9fulfilment.co.uk';
   } else if (email === 'edna@cloud9.local') {
     email = 'edna@cloud9fulfilment.co.uk';
+  } else if (email === 'dan.igel@cloud9fulfilment.co.uk' || email === 'danielle@cloud9.local') {
+    email = 'danielle@cloud9fulfilment.co.uk';
+  } else if (email === 'jess@cloud9.local') {
+    email = 'jess@cloud9fulfilment.co.uk';
   }
   const password = params.password;
 

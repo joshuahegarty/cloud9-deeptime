@@ -545,6 +545,8 @@ export function GuideClient() {
               <tbody className="divide-y divide-slate-800 bg-slate-900/60 print:bg-white print:divide-slate-200">
                 {[
                   { access: 'Admin', color: 'text-amber-400', name: 'Josh', title: 'CEO, Builder & Admin', pin: '9999', email: 'josh@cloud9fulfilment.co.uk (password123)' },
+                  { access: 'Admin', color: 'text-amber-400', name: 'Danielle', title: 'Head of People & Operations • Admin', pin: '1008', email: 'danielle@cloud9fulfilment.co.uk (password123)' },
+                  { access: 'Admin', color: 'text-amber-400', name: 'Jess', title: 'Admin • Warehouse Team', pin: '1006', email: 'jess@cloud9fulfilment.co.uk (password123)' },
                   { access: 'Supervisor', color: 'text-sky-400', name: 'Mark', title: 'Supervisor • Core Warehouse', pin: '4444', email: 'mark@cloud9fulfilment.co.uk (password123)' },
                   { access: 'Supervisor', color: 'text-sky-400', name: 'Edna', title: 'Supervisor • Core Warehouse', pin: '4445', email: 'edna@cloud9fulfilment.co.uk (password123)' },
                   { access: 'Operative', color: 'text-emerald-400', name: 'Erica', title: 'Core Warehouse Operative', pin: '1111', email: 'PIN / Kiosk Tap' },
@@ -552,9 +554,7 @@ export function GuideClient() {
                   { access: 'Operative', color: 'text-emerald-400', name: 'Alex', title: 'Core Warehouse Operative', pin: '3333', email: 'PIN / Kiosk Tap' },
                   { access: 'Operative', color: 'text-emerald-400', name: 'Mason', title: 'Core Warehouse Operative', pin: '1004', email: 'PIN / Kiosk Tap' },
                   { access: 'Operative', color: 'text-emerald-400', name: 'Ben', title: 'CCELL Operative', pin: '1005', email: 'PIN / Kiosk Tap' },
-                  { access: 'Operative', color: 'text-emerald-400', name: 'Jess', title: 'Warehouse Operative', pin: '1006', email: 'PIN / Kiosk Tap' },
                   { access: 'Operative', color: 'text-emerald-400', name: 'Sabine', title: 'Warehouse Operative', pin: '1007', email: 'PIN / Kiosk Tap' },
-                  { access: 'Operative', color: 'text-emerald-400', name: 'Dan Igel', title: 'Head of People & Operations', pin: '1008', email: 'PIN / Kiosk Tap' },
                   { access: 'Operative', color: 'text-emerald-400', name: 'Billy', title: 'Operations', pin: '1009', email: 'PIN / Kiosk Tap' },
                   { access: 'Operative', color: 'text-emerald-400', name: 'Mike', title: 'Sales', pin: '1010', email: 'PIN / Kiosk Tap' },
                   { access: 'Operative', color: 'text-emerald-400', name: 'Ray', title: 'Sales • Warehouse Operative', pin: '1011', email: 'PIN / Kiosk Tap' },

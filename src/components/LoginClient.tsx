@@ -411,14 +411,14 @@ export function LoginClient({ operatives }: LoginClientProps) {
                       dept: 'CCELL & Warehouse Support',
                       members: [
                         { name: 'Ben', role: 'CCELL Operative', pin: '1005' },
-                        { name: 'Jess', role: 'Warehouse Operative', pin: '1006' },
+                        { name: 'Jess', role: 'Admin • Warehouse Team', pin: '1006' },
                         { name: 'Sabine', role: 'Warehouse Operative', pin: '1007' },
                       ],
                     },
                     {
                       dept: 'People & Operations',
                       members: [
-                        { name: 'Dan Igel', role: 'Head of People & Operations', pin: '1008' },
+                        { name: 'Danielle', role: 'Head of People & Operations • Admin', pin: '1008' },
                         { name: 'Billy', role: 'Operations', pin: '1009' },
                       ],
                     },
@@ -628,6 +628,40 @@ export function LoginClient({ operatives }: LoginClientProps) {
                   </div>
                   <div className="text-[10px] text-amber-300 font-bold">CEO, Builder &amp; Admin</div>
                   <div className="text-[10px] text-slate-400">PIN: 9999</div>
+                </button>
+                <button
+                  type="button"
+                  disabled={staffLoading}
+                  onClick={() => {
+                    setEmail('danielle@cloud9fulfilment.co.uk');
+                    setPassword('password123');
+                    executeStaffLogin('danielle@cloud9fulfilment.co.uk', 'password123');
+                  }}
+                  className="p-2.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-amber-500/40 text-left"
+                >
+                  <div className="font-bold text-white flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                    Danielle
+                  </div>
+                  <div className="text-[10px] text-amber-300 font-bold">Head of People &amp; Ops • Admin</div>
+                  <div className="text-[10px] text-slate-400">PIN: 1008</div>
+                </button>
+                <button
+                  type="button"
+                  disabled={staffLoading}
+                  onClick={() => {
+                    setEmail('jess@cloud9fulfilment.co.uk');
+                    setPassword('password123');
+                    executeStaffLogin('jess@cloud9fulfilment.co.uk', 'password123');
+                  }}
+                  className="p-2.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-amber-500/40 text-left"
+                >
+                  <div className="font-bold text-white flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                    Jess
+                  </div>
+                  <div className="text-[10px] text-amber-300 font-bold">Admin • Warehouse Team</div>
+                  <div className="text-[10px] text-slate-400">PIN: 1006</div>
                 </button>
               </div>
             </div>

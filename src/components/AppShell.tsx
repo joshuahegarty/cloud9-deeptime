@@ -55,14 +55,14 @@ const ADDITIONAL_DEMO_USER_GROUPS = [
     dept: 'CCELL & Warehouse Support',
     users: [
       { id: '00000000-0000-0000-0000-000000000008', label: 'Ben — CCELL Operative' },
-      { id: '00000000-0000-0000-0000-000000000009', label: 'Jess — Warehouse Operative' },
+      { id: '00000000-0000-0000-0000-000000000009', label: 'Jess — Admin • Warehouse Team' },
       { id: '00000000-0000-0000-0000-000000000010', label: 'Sabine — Warehouse Operative' },
     ],
   },
   {
     dept: 'People & Operations',
     users: [
-      { id: '00000000-0000-0000-0000-000000000011', label: 'Dan Igel — Head of People & Operations' },
+      { id: '00000000-0000-0000-0000-000000000011', label: 'Danielle — Head of People & Operations • Admin' },
       { id: '00000000-0000-0000-0000-000000000012', label: 'Billy — Operations' },
     ],
   },
