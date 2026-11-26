@@ -12,7 +12,7 @@ const txStorage = new AsyncLocalStorage<DbTx>();
 
 const globalForDb = globalThis as unknown as {
   __deeptimePgPromise?: Promise<PGlite>;
-  __deeptimeMigratedV21?: boolean;
+  __deeptimeMigratedV22?: boolean;
   __deeptimeMutex?: Promise<unknown>;
   __deeptimeRealtimeVersion?: number;
 };
@@ -815,6 +815,25 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
       'BC-INT-BRIEF',
       26,
       true
+    ),
+    (
+      '20000000-0000-0000-0000-000000000307',
+      null,
+      true,
+      'Housekeeping',
+      null,
+      null,
+      'WH to CS — Creating ClickUp Tickets',
+      'INT-WH-CS',
+      null,
+      'tickets',
+      false,
+      false,
+      'our_cost',
+      0.00,
+      'BC-INT-WHCS',
+      19,
+      true
     )
   on conflict (id) do nothing;
 
@@ -1108,6 +1127,36 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
       'resolved',
       'Shipped live — Added the Edit (pencil) button on every Cloud9 Housekeeping task card, the + button in the 2D section header, and the "Add Housekeeping Task +" card at the bottom of Step 2D.',
       '[{"id":"upd-mark-1","author_name":"Josh","author_role":"admin","status":"resolved","note":"Shipped live — Added the Edit (pencil) button on every Cloud9 Housekeeping task card, the + button in the 2D header bar, and the Add Housekeeping Task + card in Step 2D.","created_at":"2026-11-05T12:20:00.000Z"}]'::jsonb
+    ),
+    (
+      '80000000-0000-0000-0000-000000000005',
+      'feature',
+      'high',
+      null,
+      'Need a selection for working on WH to CS tasks',
+      'some time is spent uploading issues to the click up for wh to cs this needs to be incorperated somewhere',
+      '/now',
+      '00000000-0000-0000-0000-000000000009',
+      'Jess',
+      'admin',
+      'resolved',
+      'Shipped live — Renamed 2D to "Cloud9 Housekeeping & Admin" and added "WH to CS — Creating ClickUp Tickets" with a mandatory flag modal requiring the ClickUp Ticket Number and a note describing what was done before processing.',
+      '[{"id":"upd-jess-1","author_name":"Josh","author_role":"admin","status":"resolved","note":"Shipped live — Renamed 2D to Cloud9 Housekeeping & Admin and added WH to CS — Creating ClickUp Tickets with a mandatory flag modal requiring the ClickUp Ticket Number and an action note before starting/processing.","created_at":"2026-11-26T10:18:00.000Z"}]'::jsonb
+    ),
+    (
+      '80000000-0000-0000-0000-000000000006',
+      'feature',
+      'medium',
+      null,
+      'need a way of billy adding adhoc pallet charges',
+      'need a way of billy adding adhoc pallet charges',
+      '/reports?start=2026-11-23&end=2026-11-23&client=all&task=all&operative=all&tab=client_task',
+      '00000000-0000-0000-0000-000000000009',
+      'Jess',
+      'admin',
+      'resolved',
+      'Shipped live — Added a dedicated "+ Ad-Hoc Charge" button in the top menu bar so Billy, Sam, and any staff member must log non-timed billable charges (Pallet Shipments, Baggies/Consumables Sold, Extra Packaging, Ad-Hoc Kit Building, Re-Labelling & Barcoding) before booking or sending, flowing directly to Customer Service & Billing.',
+      '[{"id":"upd-jess-2","author_name":"Josh","author_role":"admin","status":"resolved","note":"Shipped live — Added a dedicated + Ad-Hoc Charge button in the top menu bar for logging non-timed billable charges (Pallets, Baggies/Consumables, Extra Packaging, Ad-Hoc Kitting, Re-Labelling/Barcoding) before booking or sending.","created_at":"2026-11-26T10:18:00.000Z"}]'::jsonb
     )
   on conflict (id) do update set
     status = excluded.status,
@@ -1115,6 +1164,10 @@ const UPGRADE_AND_STANDARD_TASKS_SQL = `
     device_type = coalesce(feedback_reports.device_type, excluded.device_type),
     updates_log = excluded.updates_log,
     updated_at = now();
+
+  delete from feedback_reports
+  where title in ('Need a selection for working on WH to CS tasks', 'need a way of billy adding adhoc pallet charges')
+    and id not in ('80000000-0000-0000-0000-000000000005', '80000000-0000-0000-0000-000000000006');
 `;
 
 async function applySchemaAndSeed(pg: PGlite, includeSeed = true, includeStandardTasks = true) {
@@ -1147,16 +1200,16 @@ export async function getDb(): Promise<PGlite> {
       const pg = new PGlite(dataDir);
       await pg.waitReady;
       await applySchemaAndSeed(pg, true, true);
-      globalForDb.__deeptimeMigratedV21 = true;
+      globalForDb.__deeptimeMigratedV22 = true;
       return pg;
     })().catch((err) => {
       delete globalForDb.__deeptimePgPromise;
       throw err;
     });
-  } else if (!globalForDb.__deeptimeMigratedV21) {
+  } else if (!globalForDb.__deeptimeMigratedV22) {
     const pg = await globalForDb.__deeptimePgPromise;
     await pg.exec(UPGRADE_AND_STANDARD_TASKS_SQL);
-    globalForDb.__deeptimeMigratedV21 = true;
+    globalForDb.__deeptimeMigratedV22 = true;
   }
   return globalForDb.__deeptimePgPromise;
 }

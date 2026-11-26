@@ -246,6 +246,19 @@ export function FeedbackBoardClient({
     setBusy(false);
 
     if (res.ok) {
+      if (res.report && typeof window !== 'undefined') {
+        try {
+          const raw = window.localStorage.getItem('c9_feedback_vault_v1');
+          const existing = raw ? JSON.parse(raw) : [];
+          const list = Array.isArray(existing) ? existing : [];
+          window.localStorage.setItem(
+            'c9_feedback_vault_v1',
+            JSON.stringify([res.report, ...list.filter((x: any) => x?.id !== res.report?.id)].slice(0, 50))
+          );
+        } catch {
+          // ignore
+        }
+      }
       setNewTitle('');
       setNewDesc('');
       setNewDeviceType(null);

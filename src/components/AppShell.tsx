@@ -6,9 +6,11 @@ import {
   quickSwitchUserAction,
   replayOfflineQueueAction,
   runShiftEndJobAction,
+  syncFeedbackVaultAction,
 } from '@/app/actions';
 import { clearOfflineQueueItems, getOfflineQueueItems } from '@/lib/offline-queue';
 import { UserPublic } from '@/lib/types';
+import { AdHocChargeModal } from '@/components/AdHocChargeModal';
 import { FeedbackModal } from '@/components/FeedbackModal';
 import {
   Activity,
@@ -102,6 +104,7 @@ export function AppShell({ user, children }: AppShellProps) {
   const [syncing, setSyncing] = useState(false);
   const [lightMode, setLightMode] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [adHocModalOpen, setAdHocModalOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
@@ -161,8 +164,27 @@ export function AppShell({ user, children }: AppShellProps) {
       setActivePinField('new');
       setPinModalOpen(true);
     };
+    const onOpenAdHoc = () => setAdHocModalOpen(true);
     window.addEventListener('c9-open-change-pin', onOpenChangePin);
-    return () => window.removeEventListener('c9-open-change-pin', onOpenChangePin);
+    window.addEventListener('c9-open-adhoc-charge', onOpenAdHoc);
+
+    // Sync any browser-saved feedback items from localStorage vault
+    try {
+      const rawVault = window.localStorage.getItem('c9_feedback_vault_v1');
+      if (rawVault) {
+        const parsed = JSON.parse(rawVault);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          syncFeedbackVaultAction(parsed).catch(() => {});
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return () => {
+      window.removeEventListener('c9-open-change-pin', onOpenChangePin);
+      window.removeEventListener('c9-open-adhoc-charge', onOpenAdHoc);
+    };
   }, []);
 
   const handleSavePinChange = async (e: React.FormEvent) => {
@@ -392,6 +414,15 @@ export function AppShell({ user, children }: AppShellProps) {
                 >
                   Now
                 </NavLink>
+                <button
+                  type="button"
+                  onClick={() => setAdHocModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-black whitespace-nowrap bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/50 transition shadow-sm"
+                  title="Enter an Ad-Hoc Billable Charge before booking pallets, sending baggies, supplying packaging, or running an ad-hoc kit/relabel job"
+                >
+                  <Receipt className="w-3.5 h-3.5" />
+                  <span>+ Ad-Hoc Charge</span>
+                </button>
                 {isStaff && (
                   <>
                     <NavLink
@@ -738,6 +769,17 @@ export function AppShell({ user, children }: AppShellProps) {
                   <Clock className="w-4 h-4 shrink-0" />
                   <span>Now (Timer)</span>
                 </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setAdHocModalOpen(true);
+                  }}
+                  className="min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 border bg-amber-500/20 text-amber-300 border-amber-500/50 transition"
+                >
+                  <Receipt className="w-4 h-4 shrink-0" />
+                  <span>+ Ad-Hoc Charge</span>
+                </button>
                 {isStaff && (
                   <>
                     <Link
@@ -1205,6 +1247,11 @@ export function AppShell({ user, children }: AppShellProps) {
           </div>
         </div>
       )}
+      <AdHocChargeModal
+        open={adHocModalOpen}
+        onClose={() => setAdHocModalOpen(false)}
+        userName={user?.display_name}
+      />
     </div>
   );
 }

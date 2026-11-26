@@ -263,6 +263,7 @@ export function NowClient({
     source: EntrySource;
   } | null>(null);
   const [orderRefInput, setOrderRefInput] = useState('');
+  const [whToCsNoteInput, setWhToCsNoteInput] = useState('');
   const [initialUnitsInput, setInitialUnitsInput] = useState('');
 
   // "Task Not Listed" modal state for Operatives
@@ -327,6 +328,7 @@ export function NowClient({
         targetClient: Client;
         orderRefValue?: string | null;
         unitsValue?: number | null;
+        initialNoteValue?: string | null;
       }
     | {
         kind: 'unlisted';
@@ -752,7 +754,8 @@ export function NowClient({
     unitsValue?: number | null,
     previousUnits?: number | null,
     previousNote?: string | null,
-    previousTaskTypeId?: string | null
+    previousTaskTypeId?: string | null,
+    initialNoteValue?: string | null
   ) => {
     if (busy) return;
     const nowIso = new Date().toISOString();
@@ -763,6 +766,7 @@ export function NowClient({
       clientId: targetClient.id,
       taskTypeId: task.id,
       orderRef: orderRefValue?.trim() || null,
+      note: initialNoteValue?.trim() || null,
       units: unitsValue ?? null,
       previousUnits,
       previousNote: previousNote?.trim() || null,
@@ -802,7 +806,7 @@ export function NowClient({
           crew_id: null,
           created_by: user.id,
           auto_stopped: false,
-          note: null,
+          note: payload.note,
           last_activity_at: nowIso,
           created_at: nowIso,
           updated_at: nowIso,
@@ -876,6 +880,11 @@ export function NowClient({
   const isReworkTask = (t: TaskType) =>
     t.code === 'STD-REWORK' || t.name.trim().toLowerCase() === 'rework';
 
+  const isWhToCsTask = (t: TaskType) =>
+    t.code === 'INT-WH-CS' ||
+    t.name.toLowerCase().includes('wh to cs') ||
+    t.name.toLowerCase().includes('clickup');
+
   const isGoodsInRunningEntry = (entry: TimeEntry | null) => {
     if (!entry) return false;
     const code = (entry.task_code || '').toUpperCase();
@@ -915,19 +924,20 @@ export function NowClient({
     }
   };
 
-  // Direct 1-tap Task Start (or via Confirm Modal when orderRef / barcode scan / Rework description is used)
+  // Direct 1-tap Task Start (or via Confirm Modal when orderRef / barcode scan / Rework description / WH to CS ClickUp ticket is used)
   const executeStartTask = async (
     task: TaskType,
     source: EntrySource,
     overrideClient?: Client,
     orderRefValue?: string | null,
-    unitsValue?: number | null
+    unitsValue?: number | null,
+    initialNoteValue?: string | null
   ) => {
     if (busy) return;
     const targetClient =
       overrideClient ??
       (task.client_id ? clients.find((c) => c.id === task.client_id) : undefined) ??
-      (isHousekeepingOrInternal(task) ? MULTI_CLIENT_DEFAULT : selectedClient);
+      (isHousekeepingOrInternal(task) ? selectedClient || MULTI_CLIENT_DEFAULT : selectedClient);
     if (!targetClient) {
       promptSelectClientFirst(task.name);
       return;
@@ -935,6 +945,12 @@ export function NowClient({
 
     // Require a mandatory description when starting Rework
     if (isReworkTask(task) && !orderRefValue?.trim()) {
+      openConfirmStart(task, source, targetClient);
+      return;
+    }
+
+    // Flag to user and require ClickUp Ticket Number + What they've done Note when starting WH to CS
+    if (isWhToCsTask(task) && (!orderRefValue?.trim() || !initialNoteValue?.trim())) {
       openConfirmStart(task, source, targetClient);
       return;
     }
@@ -950,6 +966,7 @@ export function NowClient({
         targetClient,
         orderRefValue,
         unitsValue,
+        initialNoteValue,
       });
       setShowConfirmSwitchModal(true);
       return;
@@ -961,7 +978,10 @@ export function NowClient({
       targetClient,
       orderRefValue,
       unitsValue,
-      undefined
+      undefined,
+      undefined,
+      undefined,
+      initialNoteValue
     );
   };
 
@@ -1001,6 +1021,7 @@ export function NowClient({
       return;
     }
     setOrderRefInput('');
+    setWhToCsNoteInput('');
     setInitialUnitsInput('');
     setConfirmStartModal({ task, targetClient, source });
   };
@@ -1012,6 +1033,16 @@ export function NowClient({
       setFeedback('Please enter a description of the rework being performed.');
       return;
     }
+    if (isWhToCsTask(confirmStartModal.task)) {
+      if (!orderRefInput.trim()) {
+        setFeedback('Please enter the ClickUp Ticket Number before processing.');
+        return;
+      }
+      if (!whToCsNoteInput.trim()) {
+        setFeedback('Please enter a note explaining what you have done with the ClickUp ticket.');
+        return;
+      }
+    }
     const parsedUnits =
       initialUnitsInput.trim() !== '' ? parseInt(initialUnitsInput.trim(), 10) : null;
     await executeStartTask(
@@ -1019,7 +1050,8 @@ export function NowClient({
       confirmStartModal.source,
       confirmStartModal.targetClient,
       orderRefInput,
-      Number.isNaN(parsedUnits as number) ? null : parsedUnits
+      Number.isNaN(parsedUnits as number) ? null : parsedUnits,
+      isWhToCsTask(confirmStartModal.task) ? whToCsNoteInput.trim() : null
     );
   };
 
@@ -1398,7 +1430,8 @@ export function NowClient({
           pendingSwitchAction.unitsValue,
           units ?? null,
           combinedExtraNote,
-          overrideTaskTypeId
+          overrideTaskTypeId,
+          pendingSwitchAction.initialNoteValue
         );
       } else {
         await performStartUnlistedTask(
@@ -3803,10 +3836,10 @@ export function NowClient({
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-[15px] sm:text-[16px] font-black uppercase tracking-[0.8px] text-slate-100 flex items-center gap-2">
-                    2D · Cloud9 Housekeeping Tasks
+                    2D · Cloud9 Housekeeping &amp; Admin
                   </h3>
                   <p className="text-[11px] text-slate-400 truncate">
-                    Replenishment, Sweeping &amp; Aisle Cleaning, Cardboard Cleanout, Bench Restock, Pallets, Forklift &amp; Briefings
+                    WH to CS ClickUp Tickets, Replenishment, Sweeping &amp; Aisle Cleaning, Cardboard Cleanout, Bench Restock, Pallets, Forklift &amp; Briefings
                   </p>
                 </div>
               </div>
@@ -3864,21 +3897,30 @@ export function NowClient({
                 {housekeepingTasks.map((task) => {
                   const targetClient =
                     effectiveClients.find((c) => c.id === task.client_id) ||
+                    selectedClient ||
                     MULTI_CLIENT_DEFAULT;
+                  const isWhToCs = isWhToCsTask(task);
                   return (
                     <div
                       key={`hk-${task.id}`}
-                      className="p-4 rounded-2xl bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 border-l-[4px] border-l-rose-400 flex items-center justify-between gap-3 transition shadow"
+                      className={`p-4 rounded-2xl bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 border-l-[4px] ${
+                        isWhToCs ? 'border-l-amber-400 ring-1 ring-amber-500/30' : 'border-l-rose-400'
+                      } flex items-center justify-between gap-3 transition shadow`}
                     >
                       <button
                         type="button"
                         onClick={() => executeStartTask(task, 'picked', targetClient)}
                         className="flex-1 text-left min-w-0"
                       >
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono text-[10px] font-black">
-                            CLOUD9 HOUSEKEEPING
+                            CLOUD9 HOUSEKEEPING &amp; ADMIN
                           </span>
+                          {isWhToCs && (
+                            <span className="px-2 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/40 font-mono text-[10px] font-bold">
+                              CLICKUP TICKET # &amp; NOTE REQUIRED
+                            </span>
+                          )}
                           <span className="text-xs text-slate-400">
                             {task.category || 'Housekeeping'}
                           </span>
@@ -3887,7 +3929,9 @@ export function NowClient({
                           {task.name}
                         </div>
                         <div className="text-[11px] text-slate-400 mt-0.5">
-                          Non-billable internal warehouse activity ({task.code})
+                          {isWhToCs
+                            ? 'Flags for mandatory ClickUp ticket number & summary of what you did before processing'
+                            : `Non-billable internal warehouse activity (${task.code})`}
                         </div>
                       </button>
 
@@ -4148,7 +4192,7 @@ export function NowClient({
         </div>
       )}
 
-      {/* CONFIRM-AND-START MODAL (Used for Barcode Scan, attaching Order/Batch Ref, or mandatory Rework description) */}
+      {/* CONFIRM-AND-START MODAL (Used for Barcode Scan, attaching Order/Batch Ref, mandatory Rework description, or WH to CS ClickUp Ticket & Note) */}
       {confirmStartModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <form
@@ -4159,9 +4203,11 @@ export function NowClient({
               <div>
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-black uppercase tracking-wider">
                   {confirmStartModal.targetClient.code} ·{' '}
-                  {isReworkTask(confirmStartModal.task)
-                    ? 'Rework Description Required'
-                    : 'Ready to Start'}
+                  {isWhToCsTask(confirmStartModal.task)
+                    ? 'ClickUp Ticket # & Action Note Required'
+                    : isReworkTask(confirmStartModal.task)
+                      ? 'Rework Description Required'
+                      : 'Ready to Start'}
                 </div>
                 <h3 className="text-2xl font-black text-white mt-2 leading-snug">
                   {confirmStartModal.task.name}
@@ -4179,6 +4225,18 @@ export function NowClient({
               </button>
             </div>
 
+            {isWhToCsTask(confirmStartModal.task) && (
+              <div className="p-3.5 rounded-2xl bg-amber-500/15 border-2 border-amber-400/60 text-xs text-amber-100 flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-300 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="text-amber-300 block uppercase tracking-wide">
+                    Mandatory Before Processing:
+                  </strong>
+                  Please record the ClickUp Ticket Number and explain what you have done for Customer Service to review before clicking Enter.
+                </div>
+              </div>
+            )}
+
             {runningEntry && (
               <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/40 text-xs font-bold text-amber-200">
                 Starting this task will automatically stop your current task (
@@ -4189,9 +4247,11 @@ export function NowClient({
             <div>
               <div className="flex items-center justify-between gap-2 mb-1.5">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
-                  {isReworkTask(confirmStartModal.task)
-                    ? 'Describe What Rework Is Being Done *'
-                    : 'Order / Wave / Batch Reference (Optional)'}
+                  {isWhToCsTask(confirmStartModal.task)
+                    ? 'ClickUp Ticket Number *'
+                    : isReworkTask(confirmStartModal.task)
+                      ? 'Describe What Rework Is Being Done *'
+                      : 'Order / Wave / Batch Reference (Optional)'}
                 </label>
                 <VoiceMicButton
                   onTranscript={(spoken) =>
@@ -4202,17 +4262,45 @@ export function NowClient({
               <input
                 type="text"
                 autoFocus
-                required={isReworkTask(confirmStartModal.task)}
+                required={
+                  isReworkTask(confirmStartModal.task) ||
+                  isWhToCsTask(confirmStartModal.task)
+                }
                 value={orderRefInput}
                 onChange={(e) => setOrderRefInput(e.target.value)}
                 placeholder={
-                  isReworkTask(confirmStartModal.task)
-                    ? 'e.g. Repacking damaged cartons / Replacing outer sleeves'
-                    : 'e.g. WAVE-410 or ASN-901'
+                  isWhToCsTask(confirmStartModal.task)
+                    ? 'e.g. #CU-8841 or ClickUp Ticket ID'
+                    : isReworkTask(confirmStartModal.task)
+                      ? 'e.g. Repacking damaged cartons / Replacing outer sleeves'
+                      : 'e.g. WAVE-410 or ASN-901'
                 }
                 className="w-full h-14 px-4 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-emerald-500"
               />
             </div>
+
+            {isWhToCsTask(confirmStartModal.task) && (
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
+                    What Have You Done With This Ticket? (Note for CS) *
+                  </label>
+                  <VoiceMicButton
+                    onTranscript={(spoken) =>
+                      setWhToCsNoteInput((prev) => appendTranscript(prev, spoken))
+                    }
+                  />
+                </div>
+                <input
+                  type="text"
+                  required
+                  value={whToCsNoteInput}
+                  onChange={(e) => setWhToCsNoteInput(e.target.value)}
+                  placeholder="e.g. Uploaded photos of damaged stock & logged ClickUp ticket for CS review"
+                  className="w-full h-14 px-4 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3 pt-2">
               <button
@@ -4226,7 +4314,9 @@ export function NowClient({
                 type="submit"
                 disabled={
                   busy ||
-                  (isReworkTask(confirmStartModal.task) && !orderRefInput.trim())
+                  (isReworkTask(confirmStartModal.task) && !orderRefInput.trim()) ||
+                  (isWhToCsTask(confirmStartModal.task) &&
+                    (!orderRefInput.trim() || !whToCsNoteInput.trim()))
                 }
                 className="btn-glove-lg rounded-2xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 text-lg font-black flex items-center justify-center gap-2 shadow-lg"
               >

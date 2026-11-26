@@ -362,6 +362,7 @@ export async function startTaskAction(params: {
   clientId: string;
   taskTypeId: string;
   orderRef?: string | null;
+  note?: string | null;
   units?: number | null;
   previousUnits?: number | null;
   previousNote?: string | null;
@@ -481,11 +482,11 @@ export async function startTaskAction(params: {
       // 4. Insert the new running entry
       const insertRes = await tx.query<{ id: string }>(
         `insert into time_entries (
-           user_id, client_id, task_type_id, order_ref,
+           user_id, client_id, task_type_id, order_ref, note,
            started_at, ended_at, units, billable, billing_status, unbilled_reason,
            source, crew_id, created_by, auto_stopped, last_activity_at
          ) values (
-           $1, $2, $3, $4,
+           $1, $2, $3, $4, $12,
            $5::timestamptz, null, $6, $7, $8, $9,
            $10::entry_source, null, $11, false, $5::timestamptz
          ) returning id`,
@@ -501,6 +502,7 @@ export async function startTaskAction(params: {
           effectiveBillingStatus === 'our_cost' ? (params.unbilledReason?.trim() || null) : null,
           params.source,
           actorId,
+          params.note?.trim() || null,
         ]
       );
 
@@ -3122,4 +3124,306 @@ export async function updateFeedbackReportStatusAction(params: {
     return { ok: false, error: err?.message || 'Failed to update report status.' };
   }
 }
+
+export async function syncFeedbackVaultAction(
+  reports: FeedbackReport[]
+): Promise<{ ok: boolean; synced: number }> {
+  try {
+    if (!Array.isArray(reports) || reports.length === 0) {
+      return { ok: true, synced: 0 };
+    }
+    const sessionUser = await getCurrentUser();
+    let synced = 0;
+    await withDbSession(sessionUser?.id ?? null, async (tx) => {
+      for (const r of reports.slice(0, 50)) {
+        if (!r || !r.id || !r.title) continue;
+        await tx.query(
+          `insert into feedback_reports (
+             id, type, severity, device_type, title, description, page_path,
+             reporter_user_id, reporter_name, reporter_role, status,
+             admin_note, attachments, updates_log, created_at, updated_at
+           )
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb, coalesce($15::timestamptz, now()), coalesce($16::timestamptz, now()))
+           on conflict (id) do nothing`,
+          [
+            r.id,
+            r.type === 'feature' ? 'feature' : 'bug',
+            r.severity || 'medium',
+            r.device_type || null,
+            r.title,
+            r.description || '',
+            r.page_path || '/now',
+            r.reporter_user_id || null,
+            r.reporter_name || 'Warehouse User',
+            r.reporter_role || 'operative',
+            r.status || 'open',
+            r.admin_note || null,
+            JSON.stringify(Array.isArray(r.attachments) ? r.attachments : []),
+            JSON.stringify(Array.isArray(r.updates_log) ? r.updates_log : []),
+            r.created_at || new Date().toISOString(),
+            r.updated_at || new Date().toISOString(),
+          ]
+        );
+        synced++;
+      }
+    });
+    return { ok: true, synced };
+  } catch {
+    return { ok: false, synced: 0 };
+  }
+}
+
+// =============================================================================
+// 9. Global Ad-Hoc Billable Charges (No Timer — Pallet Jobs, Baggies, Packaging, Kitting, Relabelling)
+// =============================================================================
+
+export interface AdHocChargeRecord {
+  id: string;
+  client_id: string;
+  client_name: string;
+  client_code: string;
+  task_name: string;
+  category: string;
+  units: number;
+  unit_label: string;
+  order_ref: string | null;
+  note: string | null;
+  billing_status: string;
+  user_name: string;
+  created_at: string;
+}
+
+export async function getAdHocChargeContextAction(): Promise<{
+  ok: boolean;
+  clients: Array<{ id: string; name: string; code: string }>;
+  recentCharges: AdHocChargeRecord[];
+  error?: string;
+}> {
+  try {
+    const sessionUser = await getCurrentUser();
+    if (!sessionUser) {
+      return { ok: false, clients: [], recentCharges: [], error: 'Not signed in.' };
+    }
+
+    return await withDbSession(sessionUser.id, async (tx) => {
+      const clientsRes = await tx.query<{ id: string; name: string; code: string }>(
+        `select id, name, code
+         from clients
+         where active = true
+           and code <> 'MULTI'
+           and id <> '10000000-0000-0000-0000-000000000000'
+         order by name asc`
+      );
+
+      const chargesRes = await tx.query<AdHocChargeRecord>(
+        `select
+           te.id,
+           te.client_id,
+           c.name as client_name,
+           c.code as client_code,
+           tt.name as task_name,
+           coalesce(tt.category, 'Ad-Hoc Charge') as category,
+           coalesce(te.units, 1)::int as units,
+           coalesce(tt.unit_label, 'units') as unit_label,
+           te.order_ref,
+           te.note,
+           coalesce(te.billing_status, 'needs_billed') as billing_status,
+           coalesce(u.display_name, 'Staff') as user_name,
+           te.started_at::text as created_at
+         from time_entries te
+         join clients c on c.id = te.client_id
+         join task_types tt on tt.id = te.task_type_id
+         left join users u on u.id = te.user_id
+         where (tt.code like 'ADHOC-%' or te.note like '[AD-HOC CHARGE%')
+         order by te.started_at desc
+         limit 25`
+      );
+
+      return {
+        ok: true,
+        clients: clientsRes.rows,
+        recentCharges: chargesRes.rows,
+      };
+    });
+  } catch (err: any) {
+    return {
+      ok: false,
+      clients: [],
+      recentCharges: [],
+      error: err?.message || 'Failed to load Ad-Hoc Charges context.',
+    };
+  }
+}
+
+export async function createAdHocChargeAction(params: {
+  clientId: string;
+  chargeType: 'pallet' | 'baggies' | 'packaging' | 'kitting' | 'relabel' | 'custom';
+  customTitle?: string;
+  quantity: number;
+  unitLabel: string;
+  chargeAmountGbp: string;
+  reference?: string;
+  description: string;
+}): Promise<{
+  ok: boolean;
+  chargeRef?: string;
+  entryId?: string;
+  error?: string;
+}> {
+  try {
+    const sessionUser = await getCurrentUser();
+    if (!sessionUser) {
+      return { ok: false, error: 'Not signed in.' };
+    }
+    if (!params.clientId) {
+      return { ok: false, error: 'Please select the customer first before booking or charging.' };
+    }
+    const qty = Math.max(1, Math.round(Number(params.quantity) || 1));
+    const unitLabel = params.unitLabel?.trim() || 'units';
+    const chargeStr = params.chargeAmountGbp?.trim() || '';
+    const desc = params.description?.trim() || '';
+
+    if (!chargeStr) {
+      return {
+        ok: false,
+        error: 'Please enter the charge amount (£) or rate to bill before booking.',
+      };
+    }
+    if (!desc) {
+      return {
+        ok: false,
+        error: 'Please enter a short description of what is being booked, sent, or charged.',
+      };
+    }
+
+    const typeMeta: Record<
+      string,
+      { name: string; category: string; codePrefix: string }
+    > = {
+      pallet: {
+        name: '[AD-HOC] Pallet Shipment / Pallet Charge',
+        category: 'Ad-Hoc Charge · Pallet',
+        codePrefix: 'ADHOC-PAL',
+      },
+      baggies: {
+        name: '[AD-HOC] Baggies / Consumables Sold',
+        category: 'Ad-Hoc Charge · Materials',
+        codePrefix: 'ADHOC-BAG',
+      },
+      packaging: {
+        name: '[AD-HOC] Extra Packaging & Materials Supplied',
+        category: 'Ad-Hoc Charge · Packaging',
+        codePrefix: 'ADHOC-PKG',
+      },
+      kitting: {
+        name: '[AD-HOC] Ad-Hoc Kit Building / Assembly Job',
+        category: 'Ad-Hoc Charge · Kitting',
+        codePrefix: 'ADHOC-KIT',
+      },
+      relabel: {
+        name: '[AD-HOC] Re-Labelling & Barcoding Job',
+        category: 'Ad-Hoc Charge · Relabel & Barcode',
+        codePrefix: 'ADHOC-LBL',
+      },
+      custom: {
+        name: `[AD-HOC] ${params.customTitle?.trim() || 'Custom Billable Charge'}`,
+        category: 'Ad-Hoc Charge · Custom',
+        codePrefix: 'ADHOC-CUS',
+      },
+    };
+
+    const meta = typeMeta[params.chargeType] || typeMeta.pallet;
+    const taskName =
+      params.chargeType === 'custom' && params.customTitle?.trim()
+        ? `[AD-HOC] ${params.customTitle.trim()}`
+        : meta.name;
+
+    const numericCharge = parseFloat(chargeStr.replace(/[^0-9.]/g, ''));
+    const formattedCharge = !Number.isNaN(numericCharge)
+      ? `£${numericCharge.toFixed(2)}`
+      : chargeStr;
+    const chargeRef = `CHG-${Math.floor(1000 + Math.random() * 9000)}`;
+    const nowIso = new Date().toISOString();
+
+    const result = await withDbSession(sessionUser.id, async (tx) => {
+      // Find or create the matching ad-hoc task_type for this client
+      const existingTask = await tx.query<{ id: string }>(
+        `select id from task_types
+         where client_id = $1 and lower(name) = lower($2)
+         limit 1`,
+        [params.clientId, taskName]
+      );
+
+      let taskTypeId: string;
+      if (existingTask.rows.length > 0) {
+        taskTypeId = existingTask.rows[0].id;
+      } else {
+        const code = `${meta.codePrefix}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+        const createTask = await tx.query<{ id: string }>(
+          `insert into task_types (
+             client_id, is_standard, category, name, code,
+             standard_minutes, target_enabled, unit_label,
+             require_units_on_close, billable, billing_status, rate, active
+           )
+           values ($1, false, $2, $3, $4, null, false, $5, false, true, 'needs_billed', $6, true)
+           returning id`,
+          [
+            params.clientId,
+            meta.category,
+            taskName,
+            code,
+            unitLabel,
+            !Number.isNaN(numericCharge) ? numericCharge : 0,
+          ]
+        );
+        taskTypeId = createTask.rows[0].id;
+      }
+
+      const fullRef = params.reference?.trim()
+        ? `${chargeRef} · ${formattedCharge} · ${params.reference.trim()}`
+        : `${chargeRef} · ${formattedCharge}`;
+
+      const fullNote = `[AD-HOC CHARGE: ${formattedCharge} | ${qty} ${unitLabel}] ${desc}`;
+
+      const entryRes = await tx.query<{ id: string }>(
+        `insert into time_entries (
+           user_id, client_id, task_type_id, order_ref,
+           started_at, ended_at, units, billable, billing_status,
+           source, created_by, auto_stopped, note, last_activity_at
+         )
+         values (
+           $1, $2, $3, $4,
+           $5::timestamptz, $5::timestamptz, $6, true, 'needs_billed',
+           'typed', $1, false, $7, $5::timestamptz
+         )
+         returning id`,
+        [
+          sessionUser.id,
+          params.clientId,
+          taskTypeId,
+          fullRef,
+          nowIso,
+          qty,
+          fullNote,
+        ]
+      );
+
+      return { entryId: entryRes.rows[0].id };
+    });
+
+    bumpRealtimeVersion();
+    revalidateAllPaths();
+    return {
+      ok: true,
+      chargeRef,
+      entryId: result.entryId,
+    };
+  } catch (err: any) {
+    return {
+      ok: false,
+      error: err?.message || 'Failed to record Ad-Hoc Billable Charge.',
+    };
+  }
+}
+
 
